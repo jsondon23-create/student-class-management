@@ -112,7 +112,52 @@
     .status-present { background-color: #ECFDF5; color: #065F46; }
     .status-absent { background-color: #FEF2F2; color: #991B1B; }
     .status-noshow { background-color: #FFFBEB; color: #92400E; }
-    .status-noclass { background-color: #F1F5F9; color: #334155; }
+    .status-noclass { background-color: #F1F5F9; color: #64748B; }
+
+    /* Full-row gray-out & edit lock when Class Status is "No Class" */
+    tr.row-noclass,
+    tr.row-noclass td,
+    tr.row-noclass td.row-index,
+    tr.row-noclass td input,
+    tr.row-noclass td textarea,
+    tr.row-noclass td select {
+      background-color: #E2E8F0 !important;
+      color: #64748B !important;
+    }
+    tr.row-noclass td input,
+    tr.row-noclass td textarea {
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    /* Sticky table header inside horizontal scroll container */
+    .sheet-table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 15;
+      background-color: #F1F5F9;
+    }
+
+    /* Multi-line editable notes inside spreadsheet cells */
+    .sheet-cell-textarea {
+      width: 100%;
+      min-height: 40px;
+      padding: 0.45rem 0.65rem;
+      border: 2px solid transparent;
+      background: transparent;
+      font-size: 0.875rem;
+      line-height: 1.35;
+      color: #0F172A;
+      outline: none;
+      resize: vertical;
+      display: block;
+      transition: border-color 0.1s ease, background-color 0.1s ease;
+    }
+    .sheet-cell-textarea:focus {
+      border-color: #1A365D;
+      background-color: #FFFFFF;
+      box-shadow: inset 0 0 0 1px #1A365D;
+    }
 
     /* Google Sheets bottom tab bar style */
     .sheet-tab {
@@ -125,30 +170,30 @@
       border-top: 3px solid #0F2547;
       font-weight: 600;
       box-shadow: 0 -2px 6px rgba(15, 37, 71, 0.06);
+    /* Print optimization (A4 Landscape + Monthly Record & Summary Focus) */
+    @page {
+      size: A4 landscape;
+      margin: 10mm;
     }
-
-    /* Custom Scrollbar */
-    ::-webkit-scrollbar {
-      width: 8px;
-      height: 8px;
-    }
-    ::-webkit-scrollbar-track {
-      background: #F1F5F9;
-    }
-    ::-webkit-scrollbar-thumb {
-      background: #CBD5E1;
-      border-radius: 4px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: #94A3B8;
-    }
-
-    /* Print optimization */
     @media print {
       .no-print { display: none !important; }
-      body { background: #FFFFFF !important; }
-      .print-full { max-width: 100% !important; padding: 0 !important; margin: 0 !important; box-shadow: none !important; }
+      body { background: #FFFFFF !important; font-size: 11px; }
+      main { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
+      .sheet-table { min-width: 100% !important; }
+      .sheet-table thead th { position: static !important; background-color: #E2E8F0 !important; color: #0F2547 !important; }
       .sheet-table th, .sheet-table td { border: 1px solid #94A3B8 !important; }
+      .sheet-cell-input, .sheet-cell-textarea, .sheet-cell-select {
+        border: none !important;
+        box-shadow: none !important;
+        background: transparent !important;
+        min-height: auto !important;
+        padding: 0.25rem 0.4rem !important;
+        resize: none !important;
+      }
+      .sheet-cell-select {
+        -webkit-appearance: none;
+        appearance: none;
+      }
     }
   </style>
 </head>
@@ -172,7 +217,7 @@
       <div class="flex items-center gap-2 sm:gap-3">
         <span id="saveStatusIndicator" class="hidden md:inline-flex items-center gap-1.5 text-xs text-navy-100 bg-navy-800/80 px-3 py-1.5 rounded-full border border-navy-700">
           <i class="fa-solid fa-cloud-check text-emerald-400"></i>
-          <span>All changes saved</span>
+          <span>Changes saved successfully.</span>
         </span>
         <button onclick="exportAllBackupJSON()" title="Download JSON Backup of all students"
           class="text-xs font-medium bg-navy-800 hover:bg-navy-700 text-white px-3 py-2 rounded-lg border border-navy-600 transition flex items-center gap-1.5">
@@ -236,13 +281,126 @@
       view: 'dashboard', // 'dashboard' | 'profile'
       activeStudentId: null,
       activeProfileTab: 'records', // 'info' | 'schedule' | 'records'
-      activeRecordKey: null, // e.g., '2026-10' (0-indexed month)
+      activeRecordKey: null, // e.g., '2026-11' (0-indexed month)
       searchQuery: '',
       editingInfo: false,
       editingSchedule: false,
       editingBookId: null,
-      addingBook: false
+      addingBook: false,
+      hasUnsavedChanges: false
     };
+
+    /**
+     * Builds an independent 7-day (Monday-Sunday) schedule object.
+     * Each weekday has its own scheduled toggle, startTime, endTime, and durationMins.
+     */
+    function createDefaultWeeklySchedule(customDays = {}) {
+      const schedule = {};
+      DAYS_OF_WEEK.forEach(day => {
+        const override = customDays[day] || {};
+        const enabled = Boolean(override.enabled);
+        const startTime = enabled ? (override.startTime || '') : '';
+        const endTime = enabled ? (override.endTime || '') : '';
+        const durationMins = enabled ? calculateDurationMinutes(startTime, endTime) : null;
+        schedule[day] = {
+          scheduleId: generateUniqueId('SCH'),
+          dayOfWeek: day,
+          enabled,
+          startTime,
+          endTime,
+          durationMins
+        };
+      });
+      return schedule;
+    }
+
+    /**
+     * Converts HH:MM (24h from time input) into total minutes from midnight.
+     */
+    function parseTimeToMinutes(timeStr) {
+      if (!timeStr || typeof timeStr !== 'string' || !timeStr.includes(':')) return null;
+      const [hStr, mStr] = timeStr.split(':');
+      const hours = parseInt(hStr, 10);
+      const mins = parseInt(mStr, 10);
+      if (isNaN(hours) || isNaN(mins) || hours < 0 || hours > 23 || mins < 0 || mins > 59) return null;
+      return hours * 60 + mins;
+    }
+
+    /**
+     * Calculates class duration in minutes for same-day Start Time and End Time.
+     * Returns null if either time is missing or endTime <= startTime.
+     */
+    function calculateDurationMinutes(startTime, endTime) {
+      const startMins = parseTimeToMinutes(startTime);
+      const endMins = parseTimeToMinutes(endTime);
+      if (startMins === null || endMins === null) return null;
+      if (endMins <= startMins) return null;
+      return endMins - startMins;
+    }
+
+    /**
+     * Normalizes legacy or partial schedule structures into a complete Mon-Sun map.
+     */
+    function normalizeStudentSchedule(rawSchedule) {
+      const base = createDefaultWeeklySchedule();
+      if (!rawSchedule || typeof rawSchedule !== 'object') return base;
+
+      // Support legacy format if present
+      if (Array.isArray(rawSchedule.days)) {
+        rawSchedule.days.forEach(day => {
+          if (base[day]) {
+            base[day].enabled = true;
+            base[day].startTime = rawSchedule.time || '';
+            base[day].endTime = '';
+            base[day].durationMins = null;
+          }
+        });
+        return base;
+      }
+
+      DAYS_OF_WEEK.forEach(day => {
+        if (rawSchedule[day]) {
+          const entry = rawSchedule[day];
+          const enabled = Boolean(entry.enabled);
+          const startTime = enabled ? (entry.startTime || '') : '';
+          const endTime = enabled ? (entry.endTime || '') : '';
+          const durationMins = enabled
+            ? (typeof entry.durationMins === 'number' ? entry.durationMins : calculateDurationMinutes(startTime, endTime))
+            : null;
+          base[day] = {
+            scheduleId: entry.scheduleId || base[day].scheduleId,
+            dayOfWeek: day,
+            enabled,
+            startTime,
+            endTime,
+            durationMins
+          };
+        }
+      });
+      return base;
+    }
+
+    /**
+     * Formats per-day weekly schedule into a compact multi-line summary for student cards.
+     * Example: Monday – 7:00 PM; Wednesday – 8:00 PM; Friday – 7:30 PM
+     */
+    function formatPerDayScheduleSummary(scheduleMap) {
+      const normalized = normalizeStudentSchedule(scheduleMap);
+      const activeEntries = DAYS_OF_WEEK
+        .map(day => normalized[day])
+        .filter(item => item && item.enabled);
+
+      if (activeEntries.length === 0) {
+        return ['No weekly classes scheduled'];
+      }
+
+      return activeEntries.map(item => {
+        const startLabel = item.startTime ? formatTime12Hour(item.startTime) : 'Time TBD';
+        const endLabel = item.endTime ? `–${formatTime12Hour(item.endTime)}` : '';
+        const durLabel = typeof item.durationMins === 'number' ? ` (${item.durationMins} min)` : '';
+        return `${item.dayOfWeek} – ${startLabel}${endLabel}${durLabel}`;
+      });
+    }
 
     // ============================================================================
     // 1. INITIALIZATION & DEMO DATA SEEDING
@@ -331,13 +489,11 @@
           name: 'Hana Takahashi',
           info: 'Level: Intermediate (B1) • Adult Professional • Tokyo, Japan',
           notes: 'Preparing for overseas project assignment. Prefers conversational roleplay and gentle grammar correction.',
-          schedule: {
-            days: ['Monday', 'Wednesday', 'Friday'],
-            time: '19:30',
-            timeZone: 'Asia/Tokyo (JST)',
-            duration: '50 mins',
-            notes: 'Zoom link pinned in student portal. Always joins 2 minutes early.'
-          },
+          schedule: createDefaultWeeklySchedule({
+            Monday: { enabled: true, startTime: '19:00', endTime: '19:25' },
+            Wednesday: { enabled: true, startTime: '20:00', endTime: '20:25' },
+            Friday: { enabled: true, startTime: '19:30', endTime: '20:00' }
+          }),
           books: [
             {
               id: 'BK-201',
@@ -371,13 +527,11 @@
           name: 'Min-jun Park',
           info: 'Level: Pre-Intermediate (A2+) • University Student • Seoul, South Korea',
           notes: 'Building speaking fluency and IELTS foundation vocabulary.',
-          schedule: {
-            days: ['Tuesday', 'Thursday'],
-            time: '20:00',
-            timeZone: 'Asia/Seoul (KST)',
-            duration: '60 mins',
-            notes: 'Review vocabulary flashcards during first 10 minutes.'
-          },
+          schedule: createDefaultWeeklySchedule({
+            Tuesday: { enabled: true, startTime: '18:30', endTime: '18:55' },
+            Thursday: { enabled: true, startTime: '20:00', endTime: '20:30' },
+            Sunday: { enabled: true, startTime: '09:00', endTime: '09:25' }
+          }),
           books: [
             {
               id: 'BK-305',
@@ -407,38 +561,68 @@
         if (raw) {
           const parsed = JSON.parse(raw);
           if (Array.isArray(parsed)) {
-            appState.students = parsed;
+            appState.students = parsed.map(st => ({
+              ...st,
+              schedule: normalizeStudentSchedule(st.schedule),
+              books: Array.isArray(st.books) ? st.books : [],
+              records: st.records && typeof st.records === 'object' ? st.records : {}
+            }));
+            appState.hasUnsavedChanges = false;
             return;
           }
         }
       } catch (err) {
         console.error('Error loading records from localStorage:', err);
+        showToast('Could not read saved browser records; using initial sample data.', 'error');
       }
-      // First visit: initialize with clean demo data
+      // Initial state when localStorage is empty
       appState.students = createSeedData();
-      saveData(false);
+      saveData(false, 'Changes saved successfully.');
     }
 
-    function saveData(showIndicator = true) {
+    function saveData(showIndicator = true, customMessage = 'Changes saved successfully.') {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(appState.students));
+        appState.hasUnsavedChanges = false;
         if (showIndicator) {
-          triggerSavedIndicator();
+          triggerSavedIndicator(customMessage);
         }
+        return true;
       } catch (err) {
         console.error('Failed to save data:', err);
-        showToast('Warning: Could not persist changes to browser storage.', 'error');
+        appState.hasUnsavedChanges = true;
+        triggerUnsavedIndicator('Save error — changes not stored');
+        showToast('Error saving data to browser storage. Please export a JSON backup.', 'error');
+        return false;
       }
     }
 
-    function triggerSavedIndicator() {
+    function markUnsavedChanges(label = 'Unsaved changes') {
+      appState.hasUnsavedChanges = true;
+      triggerUnsavedIndicator(label);
+    }
+
+    function triggerUnsavedIndicator(label = 'Unsaved changes') {
       const el = document.getElementById('saveStatusIndicator');
       if (!el) return;
-      el.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-amber-300"></i><span>Saving...</span>`;
-      setTimeout(() => {
-        el.innerHTML = `<i class="fa-solid fa-cloud-check text-emerald-400"></i><span>All changes saved</span>`;
-      }, 350);
+      el.className = 'hidden md:inline-flex items-center gap-1.5 text-xs text-amber-200 bg-amber-900/70 px-3 py-1.5 rounded-full border border-amber-500/60';
+      el.innerHTML = `<i class="fa-solid fa-circle-exclamation text-amber-300"></i><span>${escapeHTML(label)}</span>`;
     }
+
+    function triggerSavedIndicator(message = 'Changes saved successfully.') {
+      const el = document.getElementById('saveStatusIndicator');
+      if (!el) return;
+      el.className = 'hidden md:inline-flex items-center gap-1.5 text-xs text-navy-100 bg-navy-800/80 px-3 py-1.5 rounded-full border border-navy-700';
+      el.innerHTML = `<i class="fa-solid fa-cloud-check text-emerald-400"></i><span>${escapeHTML(message)}</span>`;
+    }
+
+    // Warn on browser refresh/close if there are pending unsaved edits
+    window.addEventListener('beforeunload', (e) => {
+      if (appState.hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
 
     // ============================================================================
     // 2. HELPER UTILITIES & COMPUTATIONS
@@ -487,12 +671,8 @@
     }
 
     function formatScheduleSummary(schedule) {
-      if (!schedule || !schedule.days || schedule.days.length === 0) {
-        return 'No schedule set';
-      }
-      const shortDays = schedule.days.map(d => d.slice(0, 3)).join(', ');
-      const timeStr = schedule.time ? ` • ${formatTime12Hour(schedule.time)}` : '';
-      return `${shortDays}${timeStr}`;
+      const lines = formatPerDayScheduleSummary(schedule);
+      return lines.join(' • ');
     }
 
     function formatTime12Hour(time24) {
@@ -533,64 +713,100 @@
     }
 
     // ============================================================================
-    // 3. MODAL DIALOG SYSTEM (NO NATIVE ALERT / CONFIRM)
+    // 4. NAVIGATION CONTROLLERS (WITH UNSAVED-CHANGES PROTECTION)
     // ============================================================================
-    function openModal(htmlContent) {
-      const backdrop = document.getElementById('modalBackdrop');
-      const content = document.getElementById('modalContent');
-      content.innerHTML = htmlContent;
-      backdrop.classList.remove('hidden');
-      backdrop.classList.add('flex');
+    function guardedAction(actionFn) {
+      if (!appState.hasUnsavedChanges) {
+        actionFn();
+        return;
+      }
+      openModal(`
+        <div class="bg-navy-900 text-white px-6 py-4 flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <i class="fa-solid fa-triangle-exclamation text-amber-300"></i>
+            <h3 class="text-base font-bold">Unsaved Changes</h3>
+          </div>
+          <button onclick="closeModal()" class="text-navy-200 hover:text-white transition">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+        <div class="p-6 space-y-4">
+          <p class="text-sm text-slate-700 leading-relaxed">
+            You have unsaved changes. Would you like to save them before leaving this view, or discard unsaved edits?
+          </p>
+          <div class="pt-2 flex flex-wrap items-center justify-end gap-2.5">
+            <button type="button" onclick="closeModal()"
+              class="px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition">
+              Stay Here
+            </button>
+            <button type="button" id="discardUnsavedBtn"
+              class="px-3.5 py-2 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition">
+              Discard Changes
+            </button>
+            <button type="button" id="saveAndProceedBtn"
+              class="px-4 py-2 text-xs font-semibold text-white bg-navy-900 hover:bg-navy-800 rounded-lg shadow-xs transition flex items-center gap-1.5">
+              <i class="fa-solid fa-floppy-disk"></i> Save &amp; Continue
+            </button>
+          </div>
+        </div>
+      `);
+
+      document.getElementById('discardUnsavedBtn').onclick = () => {
+        loadData();
+        appState.hasUnsavedChanges = false;
+        closeModal();
+        actionFn();
+      };
+      document.getElementById('saveAndProceedBtn').onclick = () => {
+        const ok = saveData(true, 'Changes saved successfully.');
+        if (ok) {
+          closeModal();
+          actionFn();
+        }
+      };
     }
 
-    function closeModal() {
-      const backdrop = document.getElementById('modalBackdrop');
-      backdrop.classList.add('hidden');
-      backdrop.classList.remove('flex');
-    }
-
-    document.getElementById('modalBackdrop').addEventListener('click', (e) => {
-      if (e.target.id === 'modalBackdrop') closeModal();
-    });
-
-    // ============================================================================
-    // 4. NAVIGATION CONTROLLERS
-    // ============================================================================
     function navigateToDashboard() {
-      appState.view = 'dashboard';
-      appState.activeStudentId = null;
-      appState.editingInfo = false;
-      appState.editingSchedule = false;
-      appState.addingBook = false;
-      appState.editingBookId = null;
-      render();
+      guardedAction(() => {
+        appState.view = 'dashboard';
+        appState.activeStudentId = null;
+        appState.editingInfo = false;
+        appState.editingSchedule = false;
+        appState.addingBook = false;
+        appState.editingBookId = null;
+        render();
+      });
     }
 
     function openStudentProfile(studentId, initialTab = 'records') {
       const student = appState.students.find(s => s.id === studentId);
       if (!student) return;
 
-      appState.view = 'profile';
-      appState.activeStudentId = student.id;
-      appState.activeProfileTab = initialTab;
-      appState.editingInfo = false;
-      appState.editingSchedule = false;
-      appState.addingBook = false;
-      appState.editingBookId = null;
+      guardedAction(() => {
+        appState.view = 'profile';
+        appState.activeStudentId = student.id;
+        appState.activeProfileTab = initialTab;
+        appState.editingInfo = false;
+        appState.editingSchedule = false;
+        appState.addingBook = false;
+        appState.editingBookId = null;
 
-      // Pick the most recent monthly sheet if available
-      const keys = Object.keys(student.records || {}).sort().reverse();
-      appState.activeRecordKey = keys.length > 0 ? keys[0] : null;
-      render();
+        // Pick the most recent monthly sheet if available
+        const keys = Object.keys(student.records || {}).sort().reverse();
+        appState.activeRecordKey = keys.length > 0 ? keys[0] : null;
+        render();
+      });
     }
 
     function switchProfileTab(tabName) {
-      appState.activeProfileTab = tabName;
-      appState.editingInfo = false;
-      appState.editingSchedule = false;
-      appState.addingBook = false;
-      appState.editingBookId = null;
-      render();
+      guardedAction(() => {
+        appState.activeProfileTab = tabName;
+        appState.editingInfo = false;
+        appState.editingSchedule = false;
+        appState.addingBook = false;
+        appState.editingBookId = null;
+        render();
+      });
     }
 
     // ============================================================================
@@ -666,19 +882,13 @@
         name,
         info: infoInput.value.trim(),
         notes: notesInput.value.trim(),
-        schedule: {
-          days: [],
-          time: '',
-          timeZone: '',
-          duration: '50 mins',
-          notes: ''
-        },
+        schedule: createDefaultWeeklySchedule(),
         books: [],
         records: {}
       };
 
       appState.students.unshift(newStudent);
-      saveData();
+      saveData(true, 'Changes saved successfully.');
       closeModal();
       showToast(`Student "${name}" added (${newStudent.id}).`);
       render();
@@ -907,7 +1117,7 @@
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           ${filtered.map(student => {
             const stats = computeStudentStats(student);
-            const scheduleText = formatScheduleSummary(student.schedule);
+            const scheduleLines = formatPerDayScheduleSummary(student.schedule);
             const primaryBook = (student.books && student.books.length > 0)
               ? `${student.books[0].title}${student.books.length > 1 ? ` (+${student.books.length - 1} more)` : ''}`
               : 'No book assigned';
@@ -937,10 +1147,12 @@
                   </div>
 
                   <!-- Key Details List -->
-                  <div class="space-y-2 text-xs text-slate-600 mt-4 pt-3 border-t border-slate-100">
-                    <div class="flex items-center gap-2.5">
-                      <i class="fa-regular fa-clock text-navy-700 w-4 text-center"></i>
-                      <span class="truncate font-medium text-slate-700">${escapeHTML(scheduleText)}</span>
+                  <div class="space-y-2.5 text-xs text-slate-600 mt-4 pt-3 border-t border-slate-100">
+                    <div class="flex items-start gap-2.5">
+                      <i class="fa-regular fa-clock text-navy-700 w-4 text-center mt-0.5 shrink-0"></i>
+                      <div class="space-y-0.5 font-medium text-slate-700">
+                        ${scheduleLines.map(line => `<div>${escapeHTML(line)}</div>`).join('')}
+                      </div>
                     </div>
                     <div class="flex items-center gap-2.5">
                       <i class="fa-solid fa-book-open text-navy-700 w-4 text-center"></i>
@@ -1103,94 +1315,303 @@
     }
 
     // ----------------------------------------------------------------------------
-    // TAB A: STUDENT INFORMATION
+    // TAB B & C: PER-DAY WEEKLY SCHEDULE & BOOK / LEARNING MATERIALS
     // ----------------------------------------------------------------------------
-    function renderStudentInfoTab(student) {
-      if (appState.editingInfo) {
-        return `
-          <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden max-w-3xl">
-            <div class="bg-navy-900 text-white px-6 py-4 flex items-center justify-between">
-              <h3 class="text-base font-bold flex items-center gap-2">
-                <i class="fa-solid fa-user-pen"></i> Edit Student Information
-              </h3>
-              <span class="font-mono text-xs text-navy-200">${escapeHTML(student.id)}</span>
-            </div>
-            <form onsubmit="saveStudentInfoProfile(event)" class="p-6 space-y-5">
-              <div>
-                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
-                  Student Name <span class="text-red-600">*</span>
-                </label>
-                <input type="text" id="profInfoName" required value="${escapeHTML(student.name)}"
-                  class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800 focus:ring-2 focus:ring-navy-800/15" />
-              </div>
-
-              <div>
-                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
-                  Optional Student Information
-                </label>
-                <input type="text" id="profInfoDetails" value="${escapeHTML(student.info)}"
-                  placeholder="Level, Age, Profession, Location, or Contact..."
-                  class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800 focus:ring-2 focus:ring-navy-800/15" />
-              </div>
-
-              <div>
-                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
-                  Additional Notes
-                </label>
-                <textarea id="profInfoNotes" rows="4"
-                  placeholder="Learning objectives, pronunciation focus, strengths, and areas to improve..."
-                  class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800 focus:ring-2 focus:ring-navy-800/15">${escapeHTML(student.notes)}</textarea>
-              </div>
-
-              <div class="pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
-                <button type="button" onclick="appState.editingInfo = false; render();"
-                  class="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition">
-                  Cancel
-                </button>
-                <button type="submit"
-                  class="px-5 py-2 text-sm font-semibold text-white bg-navy-900 hover:bg-navy-800 rounded-lg shadow-xs transition flex items-center gap-2">
-                  <i class="fa-solid fa-floppy-disk"></i> Save Profile
-                </button>
-              </div>
-            </form>
-          </div>
-        `;
-      }
+    function renderScheduleAndBooksTab(student) {
+      const schedMap = normalizeStudentSchedule(student.schedule);
+      const books = student.books || [];
 
       return `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden max-w-3xl">
-          <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-            <h3 class="text-base font-bold text-navy-900 flex items-center gap-2">
-              <i class="fa-solid fa-id-card text-navy-700"></i> Student Information
-            </h3>
-            <button onclick="appState.editingInfo = true; render();"
-              class="px-4 py-2 text-xs font-semibold text-white bg-navy-900 hover:bg-navy-800 rounded-lg shadow-xs transition flex items-center gap-2">
-              <i class="fa-solid fa-pen-to-square"></i> Edit Profile
-            </button>
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <!-- LEFT COLUMN (7 cols): 7-DAY INDEPENDENT WEEKLY CLASS SCHEDULE -->
+          <div class="lg:col-span-7">
+            <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+              <div class="px-5 py-4 bg-navy-900 text-white flex items-center justify-between gap-2">
+                <div>
+                  <h3 class="text-sm font-bold uppercase tracking-wider flex items-center gap-2">
+                    <i class="fa-regular fa-calendar-check"></i> Weekly Class Schedule (Mon–Sun)
+                  </h3>
+                  <p class="text-[11px] text-navy-200 mt-0.5">Independent start/end times and auto-calculated duration per day</p>
+                </div>
+                ${!appState.editingSchedule ? `
+                  <button onclick="appState.editingSchedule = true; render();"
+                    class="px-3.5 py-1.5 text-xs font-semibold bg-white text-navy-900 hover:bg-navy-50 rounded-lg transition flex items-center gap-1.5 shrink-0">
+                    <i class="fa-solid fa-pen"></i> Edit Schedule
+                  </button>
+                ` : ''}
+              </div>
+
+              ${appState.editingSchedule ? `
+                <form onsubmit="saveStudentSchedule(event)" class="p-5 space-y-4">
+                  <div id="scheduleValidationBanner" class="hidden bg-red-50 border border-red-200 text-red-800 text-xs font-medium px-3.5 py-2.5 rounded-lg"></div>
+
+                  <div class="overflow-x-auto border border-slate-200 rounded-lg">
+                    <table class="w-full text-left border-collapse min-w-[540px]">
+                      <thead>
+                        <tr class="bg-slate-100 text-navy-900 text-[11px] uppercase tracking-wider border-b border-slate-200">
+                          <th class="py-2.5 px-3 font-bold">Day</th>
+                          <th class="py-2.5 px-3 font-bold text-center">Class Scheduled</th>
+                          <th class="py-2.5 px-3 font-bold">Start Time (AM/PM)</th>
+                          <th class="py-2.5 px-3 font-bold">End Time (AM/PM)</th>
+                          <th class="py-2.5 px-3 font-bold text-right">Duration</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-slate-200 text-xs">
+                        ${DAYS_OF_WEEK.map(day => {
+                          const entry = schedMap[day];
+                          const disabledAttr = entry.enabled ? '' : 'disabled';
+                          const durText = entry.enabled && typeof entry.durationMins === 'number'
+                            ? `${entry.durationMins} min`
+                            : (entry.enabled ? '—' : 'No Class');
+                          return `
+                            <tr id="schedRow-${day}" class="${entry.enabled ? 'bg-white' : 'bg-slate-50/80 text-slate-400'}">
+                              <td class="py-2.5 px-3 font-semibold text-navy-900">${day}</td>
+                              <td class="py-2.5 px-3 text-center">
+                                <input type="checkbox" id="schedCheck-${day}" ${entry.enabled ? 'checked' : ''}
+                                  onchange="handleScheduleDayToggle('${day}', this.checked)"
+                                  class="w-4 h-4 rounded text-navy-900 border-slate-300 focus:ring-navy-800 cursor-pointer" />
+                              </td>
+                              <td class="py-2 px-3">
+                                <input type="time" id="schedStart-${day}" value="${escapeHTML(entry.startTime)}" ${disabledAttr}
+                                  onchange="handleScheduleTimeChange('${day}')"
+                                  class="w-full px-2.5 py-1.5 text-xs font-mono border border-slate-300 rounded bg-white text-slate-900 disabled:bg-slate-100 disabled:text-slate-400 focus:outline-none focus:border-navy-800" />
+                              </td>
+                              <td class="py-2 px-3">
+                                <input type="time" id="schedEnd-${day}" value="${escapeHTML(entry.endTime)}" ${disabledAttr}
+                                  onchange="handleScheduleTimeChange('${day}')"
+                                  class="w-full px-2.5 py-1.5 text-xs font-mono border border-slate-300 rounded bg-white text-slate-900 disabled:bg-slate-100 disabled:text-slate-400 focus:outline-none focus:border-navy-800" />
+                              </td>
+                              <td id="schedDur-${day}" class="py-2.5 px-3 text-right font-mono font-semibold ${
+                                entry.enabled && typeof entry.durationMins === 'number' ? 'text-navy-900' : 'text-slate-400'
+                              }">
+                                ${durText}
+                              </td>
+                            </tr>
+                          `;
+                        }).join('')}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div class="pt-3 border-t border-slate-200 flex items-center justify-end gap-2.5">
+                    <button type="button" onclick="appState.editingSchedule = false; appState.hasUnsavedChanges = false; triggerSavedIndicator('Changes saved successfully.'); render();"
+                      class="px-3.5 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition">
+                      Cancel
+                    </button>
+                    <button type="submit"
+                      class="px-4 py-2 text-xs font-semibold text-white bg-navy-900 hover:bg-navy-800 rounded-lg shadow-xs transition flex items-center gap-1.5">
+                      <i class="fa-solid fa-floppy-disk"></i> Save Schedule
+                    </button>
+                  </div>
+                </form>
+              ` : `
+                <div class="overflow-x-auto">
+                  <table class="w-full text-left border-collapse min-w-[520px]">
+                    <thead>
+                      <tr class="bg-slate-50 text-navy-900 text-[11px] uppercase tracking-wider border-b border-slate-200">
+                        <th class="py-2.5 px-4 font-bold">Day</th>
+                        <th class="py-2.5 px-4 font-bold">Start Time</th>
+                        <th class="py-2.5 px-4 font-bold">End Time</th>
+                        <th class="py-2.5 px-4 font-bold text-right">Duration</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 text-xs sm:text-sm">
+                      ${DAYS_OF_WEEK.map(day => {
+                        const entry = schedMap[day];
+                        if (!entry.enabled) {
+                          return `
+                            <tr class="bg-slate-50/70 text-slate-400">
+                              <td class="py-2.5 px-4 font-medium">${day}</td>
+                              <td class="py-2.5 px-4 font-mono">—</td>
+                              <td class="py-2.5 px-4 font-mono">—</td>
+                              <td class="py-2.5 px-4 text-right font-medium italic">No Class</td>
+                            </tr>
+                          `;
+                        }
+                        return `
+                          <tr class="bg-white">
+                            <td class="py-2.5 px-4 font-semibold text-navy-900">${day}</td>
+                            <td class="py-2.5 px-4 font-mono text-slate-800">${entry.startTime ? escapeHTML(formatTime12Hour(entry.startTime)) : '—'}</td>
+                            <td class="py-2.5 px-4 font-mono text-slate-800">${entry.endTime ? escapeHTML(formatTime12Hour(entry.endTime)) : '—'}</td>
+                            <td class="py-2.5 px-4 text-right font-mono font-semibold text-navy-900">
+                              ${typeof entry.durationMins === 'number' ? `${entry.durationMins} min` : '—'}
+                            </td>
+                          </tr>
+                        `;
+                      }).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              `}
+            </div>
           </div>
 
-          <div class="p-6 divide-y divide-slate-100">
-            <div class="pb-4">
-              <span class="block text-xs font-semibold uppercase tracking-wider text-slate-400">Student Name</span>
-              <p class="text-base font-semibold text-slate-900 mt-1">${escapeHTML(student.name)}</p>
-            </div>
+          <!-- RIGHT COLUMN (5 cols): BOOKS / LEARNING MATERIALS -->
+          <div class="lg:col-span-5">
+            <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+              <div class="px-5 py-4 bg-navy-900 text-white flex items-center justify-between">
+                <h3 class="text-sm font-bold uppercase tracking-wider flex items-center gap-2">
+                  <i class="fa-solid fa-book-open"></i> Books &amp; Learning Materials (${books.length})
+                </h3>
+                ${!appState.addingBook ? `
+                  <button onclick="appState.addingBook = true; appState.editingBookId = null; render();"
+                    class="px-3 py-1.5 text-xs font-semibold bg-white text-navy-900 hover:bg-navy-50 rounded-lg transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-plus"></i> Add Book
+                  </button>
+                ` : ''}
+              </div>
 
-            <div class="py-4">
-              <span class="block text-xs font-semibold uppercase tracking-wider text-slate-400">Student ID</span>
-              <p class="font-mono text-sm font-medium text-navy-900 mt-1">${escapeHTML(student.id)}</p>
-            </div>
+              <div class="p-5 space-y-4">
+                <!-- ADD NEW BOOK FORM -->
+                ${appState.addingBook ? `
+                  <form onsubmit="submitAddBook(event)" class="bg-navy-50/70 border border-navy-200 rounded-xl p-4 space-y-3">
+                    <div class="flex items-center justify-between border-b border-navy-200 pb-2">
+                      <h4 class="text-xs font-bold uppercase tracking-wider text-navy-900">New Book / Learning Material</h4>
+                      <button type="button" onclick="appState.addingBook = false; render();" class="text-slate-500 hover:text-slate-800">
+                        <i class="fa-solid fa-xmark"></i>
+                      </button>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Book Title <span class="text-red-600">*</span></label>
+                        <input type="text" id="newBookTitle" required placeholder="e.g., English File Intermediate"
+                          class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                      </div>
+                      <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Book Level</label>
+                        <input type="text" id="newBookLevel" placeholder="e.g., B1 / Level 3"
+                          class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                      </div>
+                      <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Unit / Chapter</label>
+                        <input type="text" id="newBookUnit" placeholder="e.g., Unit 2: Daily Routines"
+                          class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                      </div>
+                      <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Current Page</label>
+                        <input type="text" id="newBookPage" placeholder="e.g., 14"
+                          class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                      </div>
+                    </div>
+                    <div>
+                      <label class="block text-xs font-semibold text-slate-700 mb-1">Additional Notes</label>
+                      <input type="text" id="newBookNotes" placeholder="Audio files, workbook pages, or supplementary links..."
+                        class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                    </div>
+                    <div class="flex justify-end gap-2 pt-2">
+                      <button type="button" onclick="appState.addingBook = false; render();"
+                        class="px-3.5 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50">
+                        Cancel
+                      </button>
+                      <button type="submit"
+                        class="px-4 py-1.5 text-xs font-semibold text-white bg-navy-900 hover:bg-navy-800 rounded-lg shadow-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-floppy-disk"></i> Save Book
+                      </button>
+                    </div>
+                  </form>
+                ` : ''}
 
-            <div class="py-4">
-              <span class="block text-xs font-semibold uppercase tracking-wider text-slate-400">Optional Student Information</span>
-              <p class="text-sm text-slate-800 mt-1">
-                ${student.info ? escapeHTML(student.info) : '<span class="italic text-slate-400">No additional profile info provided.</span>'}
-              </p>
-            </div>
+                <!-- BOOKS LIST -->
+                ${books.length === 0 && !appState.addingBook ? `
+                  <div class="text-center py-10 border border-dashed border-slate-300 rounded-xl">
+                    <i class="fa-solid fa-books text-slate-300 text-2xl mb-2"></i>
+                    <p class="text-sm font-semibold text-slate-700">No Books or Materials Assigned</p>
+                    <p class="text-xs text-slate-500 mt-1 mb-4">Click "Add Book" to assign textbooks, articles, or curricula to this student.</p>
+                    <button onclick="appState.addingBook = true; render();"
+                      class="px-4 py-2 text-xs font-semibold text-white bg-navy-900 hover:bg-navy-800 rounded-lg inline-flex items-center gap-1.5">
+                      <i class="fa-solid fa-plus"></i> Add First Book
+                    </button>
+                  </div>
+                ` : ''}
 
-            <div class="pt-4">
-              <span class="block text-xs font-semibold uppercase tracking-wider text-slate-400">Additional Notes</span>
-              <div class="mt-2 p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-700 whitespace-pre-line">
-                ${student.notes ? escapeHTML(student.notes) : '<span class="italic text-slate-400">No notes recorded for this student.</span>'}
+                ${books.map(book => {
+                  const isEditing = appState.editingBookId === book.id;
+                  if (isEditing) {
+                    return `
+                      <form onsubmit="submitEditBook(event, '${book.id}')" class="bg-slate-50 border-2 border-navy-800 rounded-xl p-4 space-y-3">
+                        <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                          <h4 class="text-xs font-bold uppercase tracking-wider text-navy-900">Editing Book</h4>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Book Title <span class="text-red-600">*</span></label>
+                            <input type="text" id="editBookTitle-${book.id}" required value="${escapeHTML(book.title)}"
+                              class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                          </div>
+                          <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Book Level</label>
+                            <input type="text" id="editBookLevel-${book.id}" value="${escapeHTML(book.level)}"
+                              class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                          </div>
+                          <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Unit / Chapter</label>
+                            <input type="text" id="editBookUnit-${book.id}" value="${escapeHTML(book.unit)}"
+                              class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                          </div>
+                          <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Current Page</label>
+                            <input type="text" id="editBookPage-${book.id}" value="${escapeHTML(book.currentPage)}"
+                              class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                          </div>
+                        </div>
+                        <div>
+                          <label class="block text-xs font-semibold text-slate-700 mb-1">Additional Notes</label>
+                          <input type="text" id="editBookNotes-${book.id}" value="${escapeHTML(book.notes)}"
+                            class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                        </div>
+                        <div class="flex justify-end gap-2 pt-2">
+                          <button type="button" onclick="appState.editingBookId = null; render();"
+                            class="px-3.5 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50">
+                            Cancel
+                          </button>
+                          <button type="submit"
+                            class="px-4 py-1.5 text-xs font-semibold text-white bg-navy-900 hover:bg-navy-800 rounded-lg shadow-xs flex items-center gap-1.5">
+                            <i class="fa-solid fa-floppy-disk"></i> Save Book Information
+                          </button>
+                        </div>
+                      </form>
+                    `;
+                  }
+
+                  return `
+                    <div class="border border-slate-200 hover:border-navy-300 rounded-xl p-4 bg-white transition">
+                      <div class="flex flex-col gap-2">
+                        <div class="flex items-start justify-between gap-2">
+                          <div>
+                            <div class="flex flex-wrap items-center gap-2">
+                              <h4 class="text-sm sm:text-base font-bold text-navy-900">${escapeHTML(book.title)}</h4>
+                              ${book.level ? `
+                                <span class="px-2 py-0.5 text-[11px] font-semibold bg-navy-50 text-navy-800 border border-navy-200 rounded">
+                                  ${escapeHTML(book.level)}
+                                </span>
+                              ` : ''}
+                            </div>
+                            <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 mt-1.5">
+                              <span><strong>Unit / Chapter:</strong> ${book.unit ? escapeHTML(book.unit) : '—'}</span>
+                              <span><strong>Current Page:</strong> <span class="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-navy-900 font-semibold">${book.currentPage ? escapeHTML(book.currentPage) : '—'}</span></span>
+                            </div>
+                          </div>
+                        </div>
+                        ${book.notes ? `
+                          <p class="text-xs text-slate-500 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
+                            <i class="fa-regular fa-note-sticky text-slate-400 mr-1"></i> ${escapeHTML(book.notes)}
+                          </p>
+                        ` : ''}
+
+                        <div class="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-100">
+                          <button onclick="appState.editingBookId = '${book.id}'; appState.addingBook = false; render();"
+                            class="px-2.5 py-1.5 text-xs font-semibold text-navy-900 bg-navy-50 hover:bg-navy-100 rounded-lg transition flex items-center gap-1">
+                            <i class="fa-solid fa-pen"></i> Edit Book
+                          </button>
+                          <button onclick="confirmDeleteBook('${book.id}')"
+                            class="px-2.5 py-1.5 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition flex items-center gap-1">
+                            <i class="fa-solid fa-trash-can"></i> Delete Book
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
               </div>
             </div>
           </div>
@@ -1198,24 +1619,113 @@
       `;
     }
 
-    function saveStudentInfoProfile(event) {
+    function handleScheduleDayToggle(day, isChecked) {
+      markUnsavedChanges('Unsaved schedule edits');
+      const startEl = document.getElementById(`schedStart-${day}`);
+      const endEl = document.getElementById(`schedEnd-${day}`);
+      const durEl = document.getElementById(`schedDur-${day}`);
+      const rowEl = document.getElementById(`schedRow-${day}`);
+
+      if (startEl) startEl.disabled = !isChecked;
+      if (endEl) endEl.disabled = !isChecked;
+
+      if (!isChecked) {
+        if (startEl) startEl.value = '';
+        if (endEl) endEl.value = '';
+        if (durEl) {
+          durEl.textContent = 'No Class';
+          durEl.className = 'py-2.5 px-3 text-right font-mono font-semibold text-slate-400';
+        }
+        if (rowEl) rowEl.className = 'bg-slate-50/80 text-slate-400';
+        hideScheduleValidationBanner();
+      } else {
+        if (rowEl) rowEl.className = 'bg-white';
+        handleScheduleTimeChange(day);
+      }
+    }
+
+    function handleScheduleTimeChange(day) {
+      markUnsavedChanges('Unsaved schedule edits');
+      const startEl = document.getElementById(`schedStart-${day}`);
+      const endEl = document.getElementById(`schedEnd-${day}`);
+      const durEl = document.getElementById(`schedDur-${day}`);
+      if (!startEl || !endEl || !durEl) return;
+
+      const startVal = startEl.value;
+      const endVal = endEl.value;
+      const startMins = parseTimeToMinutes(startVal);
+      const endMins = parseTimeToMinutes(endVal);
+
+      if (startMins !== null && endMins !== null && endMins <= startMins) {
+        durEl.textContent = 'Invalid';
+        durEl.className = 'py-2.5 px-3 text-right font-mono font-semibold text-red-600';
+        showScheduleValidationBanner(`${day}: End Time must be later than Start Time for same-day classes.`);
+        return;
+      }
+
+      hideScheduleValidationBanner();
+      const duration = calculateDurationMinutes(startVal, endVal);
+      if (typeof duration === 'number') {
+        durEl.textContent = `${duration} min`;
+        durEl.className = 'py-2.5 px-3 text-right font-mono font-semibold text-navy-900';
+      } else {
+        durEl.textContent = '—';
+        durEl.className = 'py-2.5 px-3 text-right font-mono font-semibold text-slate-400';
+      }
+    }
+
+    function showScheduleValidationBanner(msg) {
+      const banner = document.getElementById('scheduleValidationBanner');
+      if (!banner) return;
+      banner.textContent = msg;
+      banner.classList.remove('hidden');
+    }
+
+    function hideScheduleValidationBanner() {
+      const banner = document.getElementById('scheduleValidationBanner');
+      if (!banner) return;
+      banner.textContent = '';
+      banner.classList.add('hidden');
+    }
+
+    function saveStudentSchedule(event) {
       event.preventDefault();
       const student = getActiveStudent();
       if (!student) return;
 
-      const name = document.getElementById('profInfoName').value.trim();
-      if (!name) {
-        showToast('Student Name cannot be empty.', 'error');
-        return;
+      const currentMap = normalizeStudentSchedule(student.schedule);
+      const updatedMap = {};
+
+      for (const day of DAYS_OF_WEEK) {
+        const isChecked = Boolean(document.getElementById(`schedCheck-${day}`)?.checked);
+        const startTime = isChecked ? (document.getElementById(`schedStart-${day}`)?.value || '') : '';
+        const endTime = isChecked ? (document.getElementById(`schedEnd-${day}`)?.value || '') : '';
+
+        if (isChecked && startTime && endTime) {
+          const sMins = parseTimeToMinutes(startTime);
+          const eMins = parseTimeToMinutes(endTime);
+          if (sMins !== null && eMins !== null && eMins <= sMins) {
+            showScheduleValidationBanner(`${day}: End Time cannot be earlier than or equal to Start Time.`);
+            showToast(`Invalid time range on ${day}.`, 'error');
+            return;
+          }
+        }
+
+        const durationMins = isChecked ? calculateDurationMinutes(startTime, endTime) : null;
+        updatedMap[day] = {
+          scheduleId: currentMap[day]?.scheduleId || generateUniqueId('SCH'),
+          dayOfWeek: day,
+          enabled: isChecked,
+          startTime,
+          endTime,
+          durationMins
+        };
       }
 
-      student.name = name;
-      student.info = document.getElementById('profInfoDetails').value.trim();
-      student.notes = document.getElementById('profInfoNotes').value.trim();
-      appState.editingInfo = false;
-
-      saveData();
-      showToast('Student profile updated.');
+      student.schedule = updatedMap;
+      appState.editingSchedule = false;
+      saveData(true, 'Changes saved successfully.');
+      showToast('Changes saved successfully.');
       render();
     }
 
@@ -1643,9 +2153,42 @@
     // ----------------------------------------------------------------------------
     // TAB C: MONTH/YEAR MANAGEMENT & GOOGLE SHEETS DAILY CLASS RECORD SPREADSHEET
     // ----------------------------------------------------------------------------
+    function computeMonthlySummary(sheet) {
+      const rows = (sheet && Array.isArray(sheet.rows)) ? sheet.rows : [];
+      const totalScheduledDays = rows.length;
+      let presentCount = 0;
+      let absentCount = 0;
+      let noShowCount = 0;
+      let noClassCount = 0;
+      let unmarkedCount = 0;
+
+      rows.forEach(r => {
+        if (r.status === 'Present') presentCount++;
+        else if (r.status === 'Absent') absentCount++;
+        else if (r.status === 'No Show') noShowCount++;
+        else if (r.status === 'No Class') noClassCount++;
+        else unmarkedCount++;
+      });
+
+      const applicableDays = totalScheduledDays - noClassCount;
+      const completionRate = applicableDays > 0
+        ? Math.round((presentCount / applicableDays) * 100)
+        : 0;
+
+      return {
+        totalScheduledDays,
+        presentCount,
+        absentCount,
+        noShowCount,
+        noClassCount,
+        unmarkedCount,
+        applicableDays,
+        completionRate
+      };
+    }
+
     function renderDailyRecordsTab(student) {
       const recordKeys = Object.keys(student.records || {}).sort();
-      // Ensure activeRecordKey is valid for this student
       if (!appState.activeRecordKey || !student.records[appState.activeRecordKey]) {
         appState.activeRecordKey = recordKeys.length > 0 ? recordKeys[recordKeys.length - 1] : null;
       }
@@ -1655,16 +2198,7 @@
       const defaultMonth = now.getMonth();
       const defaultYear = now.getFullYear();
 
-      // Calculate monthly status summary for active sheet
-      let sheetPresent = 0, sheetAbsent = 0, sheetNoShow = 0, sheetNoClass = 0;
-      if (activeSheet && activeSheet.rows) {
-        activeSheet.rows.forEach(r => {
-          if (r.status === 'Present') sheetPresent++;
-          else if (r.status === 'Absent') sheetAbsent++;
-          else if (r.status === 'No Show') sheetNoShow++;
-          else if (r.status === 'No Class') sheetNoClass++;
-        });
-      }
+      const summary = computeMonthlySummary(activeSheet);
 
       return `
         <!-- MONTH & YEAR GENERATOR + SHEET CONTROLS TOOLBAR -->
@@ -1672,7 +2206,7 @@
           <!-- Left: Add New Month / Year Controls -->
           <div class="flex flex-wrap items-center gap-2.5">
             <span class="text-xs font-bold uppercase tracking-wider text-navy-900 flex items-center gap-1.5 mr-1">
-              <i class="fa-solid fa-calendar-plus text-navy-700"></i> Create Monthly Sheet:
+              <i class="fa-solid fa-calendar-plus text-navy-700"></i> Month &amp; Year:
             </span>
 
             <select id="selectNewMonth" aria-label="Select Month"
@@ -1684,7 +2218,7 @@
 
             <select id="selectNewYear" aria-label="Select Year"
               class="text-sm font-medium text-slate-800 bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:bg-white focus:outline-none focus:border-navy-800">
-              ${Array.from({ length: 11 }, (_, i) => defaultYear - 3 + i).map(yr => `
+              ${Array.from({ length: 12 }, (_, i) => defaultYear - 3 + i).map(yr => `
                 <option value="${yr}" ${yr === defaultYear ? 'selected' : ''}>${yr}</option>
               `).join('')}
             </select>
@@ -1696,11 +2230,11 @@
             </button>
           </div>
 
-          <!-- Right: Existing Month Switcher + Export / Print -->
-          <div class="flex flex-wrap items-center gap-2.5">
+          <!-- Right: Existing Month Switcher + Save / Clear / Export / Print -->
+          <div class="flex flex-wrap items-center gap-2">
             ${recordKeys.length > 0 ? `
               <div class="flex items-center gap-2">
-                <label for="existingMonthSelector" class="text-xs font-semibold text-slate-500">Saved Sheets:</label>
+                <label for="existingMonthSelector" class="text-xs font-semibold text-slate-500">Saved Months:</label>
                 <select id="existingMonthSelector" onchange="switchMonthlySheet(this.value)"
                   class="text-sm font-semibold text-navy-900 bg-navy-50 border border-navy-200 rounded-lg px-3 py-2 focus:outline-none focus:border-navy-800">
                   ${recordKeys.map(k => {
@@ -1710,10 +2244,28 @@
                 </select>
               </div>
 
+              <button onclick="saveDailyRecordSheetManual()"
+                class="px-3.5 py-2 text-xs font-semibold text-white bg-navy-900 hover:bg-navy-800 rounded-lg shadow-xs transition flex items-center gap-1.5">
+                <i class="fa-solid fa-floppy-disk"></i>
+                <span>Save Record</span>
+              </button>
+
+              <button onclick="confirmClearMonthlyRecord('${activeSheet.key}')"
+                class="px-3 py-2 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition flex items-center gap-1.5">
+                <i class="fa-solid fa-eraser"></i>
+                <span>Clear Record</span>
+              </button>
+
               <button onclick="exportCurrentSheetCSV()"
                 class="px-3 py-2 text-xs font-semibold text-navy-900 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg transition flex items-center gap-1.5">
                 <i class="fa-solid fa-file-csv text-emerald-700"></i>
                 <span>Export CSV</span>
+              </button>
+
+              <button onclick="exportCurrentSheetPDF()"
+                class="px-3 py-2 text-xs font-semibold text-navy-900 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg transition flex items-center gap-1.5">
+                <i class="fa-solid fa-file-pdf text-red-700"></i>
+                <span>Export PDF</span>
               </button>
 
               <button onclick="window.print()"
@@ -1727,36 +2279,57 @@
 
         <!-- ACTIVE SPREADSHEET AREA -->
         ${activeSheet ? `
-          <!-- Sheet Sub-Header Formula/Status Bar (Google Sheets Style) -->
-          <div class="bg-slate-50 border-x border-b border-slate-200 px-4 py-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs">
-            <div class="flex items-center gap-3">
-              <span class="font-bold text-navy-900 text-sm flex items-center gap-2">
-                <i class="fa-solid fa-table text-navy-700"></i>
-                ${escapeHTML(activeSheet.monthName)} ${activeSheet.year} — Daily Class Record
-              </span>
-              <span class="text-slate-500 hidden md:inline">
-                (${activeSheet.rows.length} Mon–Fri weekdays auto-generated)
-              </span>
+          <!-- PRINT HEADER (Visible in print/PDF export) -->
+          <div class="hidden print:block mb-3 border-b border-slate-300 pb-2">
+            <h2 class="text-lg font-bold text-navy-900">${escapeHTML(student.name)} (${escapeHTML(student.id)}) — ${escapeHTML(activeSheet.monthName)} ${activeSheet.year} Daily Class Record</h2>
+          </div>
+
+          <!-- MONTHLY SUMMARY CARDS & COMPLETION RATE PROGRESS BAR -->
+          <div class="bg-white border-x border-b border-slate-200 p-4 space-y-3.5">
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+              <div class="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Total Scheduled Days</div>
+                <div class="text-lg font-bold text-navy-900 mt-0.5 font-mono">${summary.totalScheduledDays}</div>
+              </div>
+              <div class="bg-emerald-50/70 border border-emerald-200 rounded-lg p-3">
+                <div class="text-[11px] font-semibold uppercase tracking-wider text-emerald-700">Present Classes</div>
+                <div class="text-lg font-bold text-emerald-900 mt-0.5 font-mono">${summary.presentCount}</div>
+              </div>
+              <div class="bg-red-50/70 border border-red-200 rounded-lg p-3">
+                <div class="text-[11px] font-semibold uppercase tracking-wider text-red-700">Absent Classes</div>
+                <div class="text-lg font-bold text-red-900 mt-0.5 font-mono">${summary.absentCount}</div>
+              </div>
+              <div class="bg-amber-50/70 border border-amber-200 rounded-lg p-3">
+                <div class="text-[11px] font-semibold uppercase tracking-wider text-amber-700">No Show Classes</div>
+                <div class="text-lg font-bold text-amber-900 mt-0.5 font-mono">${summary.noShowCount}</div>
+              </div>
+              <div class="bg-slate-100 border border-slate-300 rounded-lg p-3">
+                <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-600">No Class Days</div>
+                <div class="text-lg font-bold text-slate-800 mt-0.5 font-mono">${summary.noClassCount}</div>
+              </div>
+              <div class="bg-white border border-slate-200 rounded-lg p-3">
+                <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Remaining Unmarked</div>
+                <div class="text-lg font-bold text-navy-800 mt-0.5 font-mono">${summary.unmarkedCount}</div>
+              </div>
             </div>
 
-            <div class="flex flex-wrap items-center gap-3">
-              <span class="text-emerald-700 font-semibold">Present: ${sheetPresent}</span>
-              <span class="text-slate-300">|</span>
-              <span class="text-red-700 font-semibold">Absent: ${sheetAbsent}</span>
-              <span class="text-slate-300">|</span>
-              <span class="text-amber-700 font-semibold">No Show: ${sheetNoShow}</span>
-              <span class="text-slate-300">|</span>
-              <span class="text-slate-600 font-semibold">No Class: ${sheetNoClass}</span>
-              <button onclick="confirmDeleteMonthlySheet('${activeSheet.key}')" title="Delete this monthly sheet"
-                class="ml-2 text-slate-400 hover:text-red-600 transition no-print">
-                <i class="fa-solid fa-trash-can"></i>
-              </button>
+            <!-- Monthly Completion Rate Progress Bar -->
+            <div class="bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2.5">
+              <div class="flex items-center justify-between text-xs mb-1.5">
+                <span class="font-semibold text-navy-900">
+                  Monthly Completion Rate <span class="font-normal text-slate-500">(Present ÷ [Scheduled − No Class])</span>
+                </span>
+                <span class="font-mono font-bold text-navy-900">${summary.completionRate}%</span>
+              </div>
+              <div class="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                <div class="h-full bg-navy-900 transition-all duration-300" style="width: ${summary.completionRate}%"></div>
+              </div>
             </div>
           </div>
 
           <!-- FULL-WIDTH GOOGLE SHEETS SPREADSHEET TABLE -->
-          <div class="bg-white border-x border-b border-slate-300 overflow-x-auto shadow-xs">
-            <table class="sheet-table min-w-[820px]">
+          <div class="bg-white border-x border-b border-slate-300 overflow-x-auto max-h-[65vh] overflow-y-auto shadow-xs">
+            <table class="sheet-table min-w-[880px]">
               <thead>
                 <tr>
                   <th class="w-12 text-center">#</th>
@@ -1767,16 +2340,20 @@
                     </div>
                   </th>
                   <th class="w-36 text-left">Page Number</th>
-                  <th class="w-72 text-left">Lesson</th>
-                  <th class="text-left">Notes</th>
+                  <th class="w-64 text-left">Lesson</th>
+                  <th class="min-w-[220px] text-left">Notes</th>
                   <th class="w-44 text-left">Class Status</th>
                 </tr>
               </thead>
               <tbody>
                 ${activeSheet.rows.map((row, idx) => {
+                  const isNoClass = row.status === 'No Class';
                   const statusMeta = STATUS_OPTIONS.find(opt => opt.value === row.status) || STATUS_OPTIONS[0];
+                  const rowClass = isNoClass ? 'row-noclass status-noclass' : 'bg-white';
+                  const disabledAttr = isNoClass ? 'disabled' : '';
+
                   return `
-                    <tr class="bg-white">
+                    <tr class="${rowClass}">
                       <!-- Row Number -->
                       <td class="row-index bg-slate-50 text-center text-xs font-mono text-slate-500 select-none px-2">
                         ${idx + 1}
@@ -1797,8 +2374,10 @@
                         <input
                           type="text"
                           value="${escapeHTML(row.pageNumber)}"
-                          placeholder="e.g. 12–15"
+                          placeholder="e.g. 12–15, 12A"
+                          ${disabledAttr}
                           aria-label="Page Number for ${escapeHTML(row.formattedDate)}"
+                          oninput="markUnsavedChanges('Unsaved record edits')"
                           onchange="updateDailyRecordCell('${activeSheet.key}', ${idx}, 'pageNumber', this.value)"
                           onkeydown="handleGridKeyNav(event, ${idx}, 0)"
                           data-row="${idx}" data-col="0"
@@ -1812,7 +2391,9 @@
                           type="text"
                           value="${escapeHTML(row.lesson)}"
                           placeholder="Enter lesson topic..."
+                          ${disabledAttr}
                           aria-label="Lesson for ${escapeHTML(row.formattedDate)}"
+                          oninput="markUnsavedChanges('Unsaved record edits')"
                           onchange="updateDailyRecordCell('${activeSheet.key}', ${idx}, 'lesson', this.value)"
                           onkeydown="handleGridKeyNav(event, ${idx}, 1)"
                           data-row="${idx}" data-col="1"
@@ -1820,18 +2401,18 @@
                         />
                       </td>
 
-                      <!-- Editable Notes -->
+                      <!-- Editable Notes Textarea -->
                       <td>
-                        <input
-                          type="text"
-                          value="${escapeHTML(row.notes)}"
-                          placeholder="Class notes, homework, feedback..."
+                        <textarea
+                          rows="1"
+                          placeholder="Class notes, observations, homework..."
+                          ${disabledAttr}
                           aria-label="Notes for ${escapeHTML(row.formattedDate)}"
+                          oninput="markUnsavedChanges('Unsaved record edits')"
                           onchange="updateDailyRecordCell('${activeSheet.key}', ${idx}, 'notes', this.value)"
-                          onkeydown="handleGridKeyNav(event, ${idx}, 2)"
                           data-row="${idx}" data-col="2"
-                          class="sheet-cell-input"
-                        />
+                          class="sheet-cell-textarea"
+                        >${escapeHTML(row.notes)}</textarea>
                       </td>
 
                       <!-- Class Status Dropdown -->
@@ -1855,25 +2436,33 @@
             </table>
           </div>
 
-          <!-- GOOGLE SHEETS STYLE BOTTOM SHEET TABS -->
-          <div class="bg-slate-100 border-x border-b border-slate-300 rounded-b-xl px-3 flex items-center gap-1 overflow-x-auto no-print">
-            <button onclick="handleAddMonthlyRecord()" title="Add selected month sheet"
-              class="px-2.5 py-2 text-slate-600 hover:text-navy-900 hover:bg-slate-200/70 rounded transition text-xs font-bold">
-              <i class="fa-solid fa-plus"></i>
+          <!-- GOOGLE SHEETS STYLE BOTTOM SHEET TABS & SAVE BAR -->
+          <div class="bg-slate-100 border-x border-b border-slate-300 rounded-b-xl px-3 py-1.5 flex flex-wrap items-center justify-between gap-2 no-print">
+            <div class="flex items-center gap-1 overflow-x-auto">
+              <button onclick="handleAddMonthlyRecord()" title="Add selected month sheet"
+                class="px-2.5 py-1.5 text-slate-600 hover:text-navy-900 hover:bg-slate-200/70 rounded transition text-xs font-bold">
+                <i class="fa-solid fa-plus"></i>
+              </button>
+              <div class="h-4 w-[1px] bg-slate-300 mx-1"></div>
+              ${recordKeys.map(k => {
+                const sheet = student.records[k];
+                const isActive = k === activeSheet.key;
+                return `
+                  <button onclick="switchMonthlySheet('${k}')"
+                    class="sheet-tab px-3.5 py-2 text-xs whitespace-nowrap ${
+                      isActive ? 'active' : 'text-slate-600 hover:bg-slate-200/60 hover:text-navy-900'
+                    }">
+                    ${escapeHTML(sheet.monthName.slice(0, 3))} ${sheet.year}
+                  </button>
+                `;
+              }).join('')}
+            </div>
+
+            <button onclick="saveDailyRecordSheetManual()"
+              class="px-3.5 py-1.5 bg-navy-900 hover:bg-navy-800 text-white text-xs font-semibold rounded-lg transition flex items-center gap-1.5">
+              <i class="fa-solid fa-floppy-disk"></i>
+              <span>Save Changes</span>
             </button>
-            <div class="h-4 w-[1px] bg-slate-300 mx-1"></div>
-            ${recordKeys.map(k => {
-              const sheet = student.records[k];
-              const isActive = k === activeSheet.key;
-              return `
-                <button onclick="switchMonthlySheet('${k}')"
-                  class="sheet-tab px-4 py-2.5 text-xs whitespace-nowrap ${
-                    isActive ? 'active' : 'text-slate-600 hover:bg-slate-200/60 hover:text-navy-900'
-                  }">
-                  ${escapeHTML(sheet.monthName.slice(0, 3))} ${sheet.year}
-                </button>
-              `;
-            }).join('')}
           </div>
         ` : `
           <!-- EMPTY MONTHLY RECORD PROMPT -->
@@ -1903,6 +2492,11 @@
       const monthIndex = monthSelect ? parseInt(monthSelect.value, 10) : new Date().getMonth();
       const year = yearSelect ? parseInt(yearSelect.value, 10) : new Date().getFullYear();
 
+      if (isNaN(monthIndex) || monthIndex < 0 || monthIndex > 11 || isNaN(year) || year < 1900 || year > 2100) {
+        showToast('Please select a valid month and year.', 'error');
+        return;
+      }
+
       const key = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
       if (!student.records) student.records = {};
 
@@ -1913,6 +2507,205 @@
         render();
         return;
       }
+
+      const generatedRows = generateWeekdaysForMonth(year, monthIndex);
+      student.records[key] = {
+        key,
+        year,
+        monthIndex,
+        monthName: MONTHS[monthIndex],
+        rows: generatedRows
+      };
+
+      appState.activeRecordKey = key;
+      saveData(true, 'Changes saved successfully.');
+      showToast(`Generated ${generatedRows.length} weekday rows for ${MONTHS[monthIndex]} ${year}.`);
+      render();
+    }
+
+    function switchMonthlySheet(key) {
+      guardedAction(() => {
+        appState.activeRecordKey = key;
+        render();
+      });
+    }
+
+    function syncVisibleGridInputsToSheet(sheetKey) {
+      const student = getActiveStudent();
+      if (!student || !student.records[sheetKey]) return;
+      const rows = student.records[sheetKey].rows || [];
+
+      rows.forEach((row, idx) => {
+        const pageEl = document.querySelector(`[data-row="${idx}"][data-col="0"]`);
+        const lessonEl = document.querySelector(`[data-row="${idx}"][data-col="1"]`);
+        const notesEl = document.querySelector(`[data-row="${idx}"][data-col="2"]`);
+        const statusEl = document.querySelector(`[data-row="${idx}"][data-col="3"]`);
+
+        if (pageEl && !pageEl.disabled) row.pageNumber = pageEl.value;
+        if (lessonEl && !lessonEl.disabled) row.lesson = lessonEl.value;
+        if (notesEl && !notesEl.disabled) row.notes = notesEl.value;
+        if (statusEl) row.status = statusEl.value;
+      });
+    }
+
+    function saveDailyRecordSheetManual() {
+      const student = getActiveStudent();
+      if (!student || !appState.activeRecordKey || !student.records[appState.activeRecordKey]) return;
+      syncVisibleGridInputsToSheet(appState.activeRecordKey);
+      const ok = saveData(true, 'Changes saved successfully.');
+      if (ok) {
+        showToast('Changes saved successfully.');
+        render();
+      }
+    }
+
+    function updateDailyRecordCell(sheetKey, rowIndex, field, value) {
+      const student = getActiveStudent();
+      if (!student || !student.records[sheetKey]) return;
+      const row = student.records[sheetKey].rows[rowIndex];
+      if (!row || row.status === 'No Class') return;
+
+      row[field] = value;
+      saveData(true, 'Changes saved successfully.');
+    }
+
+    function updateDailyRecordStatus(sheetKey, rowIndex, selectEl) {
+      const student = getActiveStudent();
+      if (!student || !student.records[sheetKey]) return;
+      const row = student.records[sheetKey].rows[rowIndex];
+      if (!row) return;
+
+      row.status = selectEl.value;
+      saveData(true, 'Changes saved successfully.');
+      render();
+    }
+
+    function confirmClearMonthlyRecord(sheetKey) {
+      const student = getActiveStudent();
+      if (!student || !student.records[sheetKey]) return;
+      const sheet = student.records[sheetKey];
+
+      openModal(`
+        <div class="bg-amber-700 text-white px-6 py-4 flex items-center justify-between">
+          <h3 class="text-base font-bold">Clear Monthly Class Record</h3>
+          <button onclick="closeModal()" class="text-amber-100 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="p-6 space-y-4">
+          <p class="text-sm text-slate-700">
+            Clear all entered Page Numbers, Lessons, Notes, and Class Statuses for <strong>${escapeHTML(sheet.monthName)} ${sheet.year}</strong>?
+            The Monday–Friday dates will remain generated with blank statuses.
+          </p>
+          <div class="flex justify-end gap-2.5 pt-2">
+            <button onclick="closeModal()" class="px-4 py-2 text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">Cancel</button>
+            <button onclick="executeClearMonthlyRecord('${sheetKey}')" class="px-4 py-2 text-sm font-semibold bg-amber-700 hover:bg-amber-800 text-white rounded-lg">Clear Record</button>
+          </div>
+        </div>
+      `);
+    }
+
+    function executeClearMonthlyRecord(sheetKey) {
+      const student = getActiveStudent();
+      if (!student || !student.records[sheetKey]) return;
+      const sheet = student.records[sheetKey];
+      sheet.rows = generateWeekdaysForMonth(sheet.year, sheet.monthIndex);
+      saveData(true, 'Changes saved successfully.');
+      closeModal();
+      showToast(`Cleared ${sheet.monthName} ${sheet.year} entries.`);
+      render();
+    }
+
+    // ============================================================================
+    // 7. EXPORT & PRINT UTILITIES (CSV, A4 LANDSCAPE PDF, PRINT)
+    // ============================================================================
+    function exportCurrentSheetPDF() {
+      const student = getActiveStudent();
+      if (!student || !appState.activeRecordKey || !student.records[appState.activeRecordKey]) return;
+      const sheet = student.records[appState.activeRecordKey];
+      const summary = computeMonthlySummary(sheet);
+
+      const printWindow = window.open('', '_blank', 'width=1120,height=790');
+      if (!printWindow) {
+        showToast('Pop-up blocked. Using standard print view instead.', 'info');
+        window.print();
+        return;
+      }
+
+      const rowsHtml = (sheet.rows || []).map((r, i) => `
+        <tr class="${r.status === 'No Class' ? 'noclass' : ''}">
+          <td class="num">${i + 1}</td>
+          <td>${escapeHTML(r.formattedDate)} (${escapeHTML(r.dayLabel)})</td>
+          <td class="mono">${escapeHTML(r.pageNumber || '—')}</td>
+          <td>${escapeHTML(r.lesson || '—')}</td>
+          <td>${escapeHTML(r.notes || '—')}</td>
+          <td class="status">${escapeHTML(r.status || 'Unmarked')}</td>
+        </tr>
+      `).join('');
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8" />
+          <title>${escapeHTML(student.name)} - ${escapeHTML(sheet.monthName)} ${sheet.year} Class Record</title>
+          <style>
+            @page { size: A4 landscape; margin: 12mm; }
+            body { font-family: Inter, Arial, sans-serif; color: #0F172A; margin: 0; padding: 0; }
+            .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0F2547; padding-bottom: 8px; margin-bottom: 12px; }
+            .header h1 { font-size: 18px; color: #0F2547; margin: 0; }
+            .header .meta { font-size: 12px; color: #475569; margin-top: 3px; }
+            .header .period { font-size: 14px; font-weight: 700; color: #0F2547; }
+            .summary { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 12px; }
+            .card { border: 1px solid #CBD5E1; border-radius: 6px; padding: 6px 8px; background: #F8FAFC; }
+            .card .lbl { font-size: 10px; text-transform: uppercase; color: #64748B; font-weight: 600; }
+            .card .val { font-size: 14px; font-weight: 700; color: #0F2547; margin-top: 2px; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+            th { background: #0F2547; color: #FFFFFF; text-align: left; padding: 6px 8px; border: 1px solid #0F2547; }
+            td { padding: 5px 8px; border: 1px solid #CBD5E1; vertical-align: top; }
+            td.num { text-align: center; color: #64748B; width: 28px; }
+            td.mono { font-family: monospace; }
+            td.status { font-weight: 600; }
+            tr.noclass td { background: #E2E8F0; color: #64748B; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1>${escapeHTML(student.name)} — Daily Class Record</h1>
+              <div class="meta">Student ID: ${escapeHTML(student.id)}${student.info ? ` • ${escapeHTML(student.info)}` : ''}</div>
+            </div>
+            <div class="period">${escapeHTML(sheet.monthName)} ${sheet.year} (A4 Landscape)</div>
+          </div>
+
+          <div class="summary">
+            <div class="card"><div class="lbl">Scheduled Days</div><div class="val">${summary.totalScheduledDays}</div></div>
+            <div class="card"><div class="lbl">Present</div><div class="val">${summary.presentCount}</div></div>
+            <div class="card"><div class="lbl">Absent</div><div class="val">${summary.absentCount}</div></div>
+            <div class="card"><div class="lbl">No Show</div><div class="val">${summary.noShowCount}</div></div>
+            <div class="card"><div class="lbl">No Class</div><div class="val">${summary.noClassCount}</div></div>
+            <div class="card"><div class="lbl">Unmarked</div><div class="val">${summary.unmarkedCount}</div></div>
+            <div class="card"><div class="lbl">Completion Rate</div><div class="val">${summary.completionRate}%</div></div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Date</th>
+                <th>Page Number</th>
+                <th>Lesson</th>
+                <th>Notes</th>
+                <th>Class Status</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+          <script>window.onload = function() { window.print(); };<\/script>
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+      showToast(`Prepared A4 Landscape PDF for ${sheet.monthName} ${sheet.year}.`);
+    }
 
       const generatedRows = generateWeekdaysForMonth(year, monthIndex);
       student.records[key] = {
