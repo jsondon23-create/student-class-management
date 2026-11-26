@@ -1,0 +1,2104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Student Daily Class Record Management System</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter & JetBrains Mono for spreadsheet clarity -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            navy: {
+              50: '#F0F4F9',
+              100: '#D9E2EC',
+              200: '#BCCCDC',
+              300: '#9FB3C8',
+              400: '#829AB1',
+              500: '#627D98',
+              600: '#334E68',
+              700: '#243B53',
+              800: '#1A365D',
+              900: '#0F2547',
+              950: '#091830',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom Google Sheets-inspired grid styling & smooth scrollbars */
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #F8FAFC;
+      color: #0F172A;
+    }
+
+    /* Spreadsheet Grid Cell Focus & Borders */
+    .sheet-table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    .sheet-table th {
+      background-color: #F1F5F9;
+      color: #0F2547;
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border: 1px solid #CBD5E1;
+      padding: 0.6rem 0.75rem;
+      user-select: none;
+    }
+    .sheet-table td {
+      border: 1px solid #E2E8F0;
+      padding: 0;
+      vertical-align: middle;
+      transition: background-color 0.12s ease;
+    }
+    .sheet-table tbody tr:hover td.row-index {
+      background-color: #E2E8F0;
+      color: #0F2547;
+    }
+    .sheet-cell-input {
+      width: 100%;
+      height: 100%;
+      min-height: 38px;
+      padding: 0.45rem 0.65rem;
+      border: 2px solid transparent;
+      background: transparent;
+      font-size: 0.875rem;
+      color: #0F172A;
+      outline: none;
+      transition: border-color 0.1s ease, background-color 0.1s ease;
+    }
+    .sheet-cell-input:focus {
+      border-color: #1A365D;
+      background-color: #FFFFFF;
+      box-shadow: inset 0 0 0 1px #1A365D;
+    }
+    .sheet-cell-select {
+      width: 100%;
+      min-height: 38px;
+      padding: 0.4rem 0.6rem;
+      border: 2px solid transparent;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      outline: none;
+      cursor: pointer;
+      border-radius: 0;
+    }
+    .sheet-cell-select:focus {
+      border-color: #1A365D;
+    }
+
+    /* Status color coding */
+    .status-blank { background-color: #FFFFFF; color: #64748B; font-weight: 400; }
+    .status-present { background-color: #ECFDF5; color: #065F46; }
+    .status-absent { background-color: #FEF2F2; color: #991B1B; }
+    .status-noshow { background-color: #FFFBEB; color: #92400E; }
+    .status-noclass { background-color: #F1F5F9; color: #334155; }
+
+    /* Google Sheets bottom tab bar style */
+    .sheet-tab {
+      border-top: 2px solid transparent;
+      transition: all 0.15s ease;
+    }
+    .sheet-tab.active {
+      background-color: #FFFFFF;
+      color: #0F2547;
+      border-top: 3px solid #0F2547;
+      font-weight: 600;
+      box-shadow: 0 -2px 6px rgba(15, 37, 71, 0.06);
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #F1F5F9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #CBD5E1;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94A3B8;
+    }
+
+    /* Print optimization */
+    @media print {
+      .no-print { display: none !important; }
+      body { background: #FFFFFF !important; }
+      .print-full { max-width: 100% !important; padding: 0 !important; margin: 0 !important; box-shadow: none !important; }
+      .sheet-table th, .sheet-table td { border: 1px solid #94A3B8 !important; }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- TOP APPLICATION NAVBAR -->
+  <header class="bg-navy-900 text-white shadow-md sticky top-0 z-30 no-print">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+      <!-- Brand / Title -->
+      <div class="flex items-center gap-3 cursor-pointer" onclick="navigateToDashboard()">
+        <div class="w-9 h-9 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center text-white shadow-inner">
+          <i class="fa-solid fa-table-cells text-lg"></i>
+        </div>
+        <div>
+          <h1 class="text-base sm:text-lg font-bold tracking-tight leading-tight">Student Daily Class Record</h1>
+          <p class="text-[11px] text-navy-200 hidden sm:block">ESL Academic &amp; Attendance Spreadsheet System</p>
+        </div>
+      </div>
+
+      <!-- Right Utility Actions -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <span id="saveStatusIndicator" class="hidden md:inline-flex items-center gap-1.5 text-xs text-navy-100 bg-navy-800/80 px-3 py-1.5 rounded-full border border-navy-700">
+          <i class="fa-solid fa-cloud-check text-emerald-400"></i>
+          <span>All changes saved</span>
+        </span>
+        <button onclick="exportAllBackupJSON()" title="Download JSON Backup of all students"
+          class="text-xs font-medium bg-navy-800 hover:bg-navy-700 text-white px-3 py-2 rounded-lg border border-navy-600 transition flex items-center gap-1.5">
+          <i class="fa-solid fa-download"></i>
+          <span class="hidden sm:inline">Backup Data</span>
+        </button>
+        <button onclick="confirmResetDemoData()" title="Reset to sample ESL students"
+          class="text-xs font-medium bg-navy-800 hover:bg-navy-700 text-navy-200 hover:text-white px-3 py-2 rounded-lg border border-navy-600 transition flex items-center gap-1.5">
+          <i class="fa-solid fa-rotate-left"></i>
+          <span class="hidden md:inline">Demo Data</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT CONTAINER -->
+  <main id="appContainer" class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <!-- Dynamic Views Rendered Here -->
+  </main>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none no-print"></div>
+
+  <!-- MODAL BACKDROP & DIALOG CONTAINER -->
+  <div id="modalBackdrop" class="fixed inset-0 bg-navy-950/60 backdrop-blur-xs z-40 hidden items-center justify-center p-4 no-print">
+    <div id="modalContent" class="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden transform transition-all">
+      <!-- Dynamic Modal Body -->
+    </div>
+  </div>
+
+  <script>
+    /**
+     * ============================================================================
+     * STUDENT DAILY CLASS RECORD MANAGEMENT SYSTEM - CORE APPLICATION ENGINE
+     * ============================================================================
+     * Architecture:
+     * - Single source of truth stored in `localStorage` under `esl_class_records_v1`.
+     * - Full CRUD isolation per student (unique IDs, independent schedules, books,
+     *   and monthly weekday record sheets).
+     * - Automated calendar engine generating strictly Monday-Friday dates for
+     *   any month/year (accounting for leap years) with blank status defaults.
+     */
+
+    const STORAGE_KEY = 'esl_class_records_v1';
+    const MONTHS = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const STATUS_OPTIONS = [
+      { value: '', label: '— Select Status —', className: 'status-blank' },
+      { value: 'Present', label: 'Present', className: 'status-present' },
+      { value: 'Absent', label: 'Absent', className: 'status-absent' },
+      { value: 'No Show', label: 'No Show', className: 'status-noshow' },
+      { value: 'No Class', label: 'No Class', className: 'status-noclass' }
+    ];
+
+    // Application State
+    let appState = {
+      students: [],
+      view: 'dashboard', // 'dashboard' | 'profile'
+      activeStudentId: null,
+      activeProfileTab: 'records', // 'info' | 'schedule' | 'records'
+      activeRecordKey: null, // e.g., '2026-10' (0-indexed month)
+      searchQuery: '',
+      editingInfo: false,
+      editingSchedule: false,
+      editingBookId: null,
+      addingBook: false
+    };
+
+    // ============================================================================
+    // 1. INITIALIZATION & DEMO DATA SEEDING
+    // ============================================================================
+    function generateUniqueId(prefix = 'STU') {
+      const rand = Math.floor(1000 + Math.random() * 9000);
+      const stamp = Date.now().toString().slice(-3);
+      return `${prefix}-${rand}${stamp}`;
+    }
+
+    /**
+     * Generates strictly Monday–Friday dates for a given year and month (0-11).
+     * Accurately handles month lengths and leap years via native Date objects.
+     * Leaves Page Number, Lesson, Notes, and Class Status completely blank.
+     */
+    function generateWeekdaysForMonth(year, monthIndex) {
+      const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+      const shortMonth = MONTHS[monthIndex].slice(0, 3);
+      const dayNamesShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const rows = [];
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateObj = new Date(year, monthIndex, day);
+        const dayOfWeek = dateObj.getDay(); // 0 = Sun, 1 = Mon ... 5 = Fri, 6 = Sat
+        if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+          const isoDate = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const formattedDate = `${shortMonth} ${day}, ${year}`;
+          const dayLabel = dayNamesShort[dayOfWeek];
+          rows.push({
+            id: `ROW-${isoDate}`,
+            isoDate,
+            formattedDate,
+            dayLabel,
+            pageNumber: '',
+            lesson: '',
+            notes: '',
+            status: '' // Strictly blank on generation
+          });
+        }
+      }
+      return rows;
+    }
+
+    function createSeedData() {
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth();
+      const recordKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+
+      // Sample Student 1
+      const sampleRows1 = generateWeekdaysForMonth(currentYear, currentMonth);
+      if (sampleRows1.length >= 3) {
+        sampleRows1[0].pageNumber = '14–16';
+        sampleRows1[0].lesson = 'Unit 3: Business Introductions & Small Talk';
+        sampleRows1[0].notes = 'Great pronunciation on polite greetings. Homework: p. 17 ex. B';
+        sampleRows1[0].status = 'Present';
+
+        sampleRows1[1].pageNumber = '17–19';
+        sampleRows1[1].lesson = 'Unit 3: Describing Job Responsibilities';
+        sampleRows1[1].notes = 'Practiced present simple vs. present continuous.';
+        sampleRows1[1].status = 'Present';
+
+        sampleRows1[2].pageNumber = '';
+        sampleRows1[2].lesson = 'Unit 4: Scheduling Meetings';
+        sampleRows1[2].notes = 'Student notified 2 hours prior due to work travel.';
+        sampleRows1[2].status = 'Absent';
+      }
+
+      // Sample Student 2
+      const sampleRows2 = generateWeekdaysForMonth(currentYear, currentMonth);
+      if (sampleRows2.length >= 2) {
+        sampleRows2[0].pageNumber = '42';
+        sampleRows2[0].lesson = 'Chapter 6: Past Tense Irregular Verbs';
+        sampleRows2[0].notes = 'Completed storytelling activity with 90% accuracy.';
+        sampleRows2[0].status = 'Present';
+
+        sampleRows2[1].pageNumber = '43–44';
+        sampleRows2[1].lesson = 'Chapter 6: Travel & Airport Vocabulary';
+        sampleRows2[1].notes = 'Roleplay check-in conversation.';
+        sampleRows2[1].status = 'Present';
+      }
+
+      return [
+        {
+          id: 'STU-1042',
+          name: 'Hana Takahashi',
+          info: 'Level: Intermediate (B1) • Adult Professional • Tokyo, Japan',
+          notes: 'Preparing for overseas project assignment. Prefers conversational roleplay and gentle grammar correction.',
+          schedule: {
+            days: ['Monday', 'Wednesday', 'Friday'],
+            time: '19:30',
+            timeZone: 'Asia/Tokyo (JST)',
+            duration: '50 mins',
+            notes: 'Zoom link pinned in student portal. Always joins 2 minutes early.'
+          },
+          books: [
+            {
+              id: 'BK-201',
+              title: 'Business Result Intermediate',
+              level: 'B1 Intermediate',
+              unit: 'Unit 4: Scheduling & Arrangements',
+              currentPage: '20',
+              notes: 'Focus on listening tracks and email writing.'
+            },
+            {
+              id: 'BK-202',
+              title: 'English Grammar in Use (Murphy)',
+              level: 'Intermediate',
+              unit: 'Unit 19: Future Tenses',
+              currentPage: '38',
+              notes: 'Used as supplementary homework reference.'
+            }
+          ],
+          records: {
+            [recordKey]: {
+              key: recordKey,
+              year: currentYear,
+              monthIndex: currentMonth,
+              monthName: MONTHS[currentMonth],
+              rows: sampleRows1
+            }
+          }
+        },
+        {
+          id: 'STU-1089',
+          name: 'Min-jun Park',
+          info: 'Level: Pre-Intermediate (A2+) • University Student • Seoul, South Korea',
+          notes: 'Building speaking fluency and IELTS foundation vocabulary.',
+          schedule: {
+            days: ['Tuesday', 'Thursday'],
+            time: '20:00',
+            timeZone: 'Asia/Seoul (KST)',
+            duration: '60 mins',
+            notes: 'Review vocabulary flashcards during first 10 minutes.'
+          },
+          books: [
+            {
+              id: 'BK-305',
+              title: 'Speakout 2nd Edition Pre-Intermediate',
+              level: 'A2+ Pre-Intermediate',
+              unit: 'Chapter 6: Journeys',
+              currentPage: '45',
+              notes: 'Great engagement with video podcasts.'
+            }
+          ],
+          records: {
+            [recordKey]: {
+              key: recordKey,
+              year: currentYear,
+              monthIndex: currentMonth,
+              monthName: MONTHS[currentMonth],
+              rows: sampleRows2
+            }
+          }
+        }
+      ];
+    }
+
+    function loadData() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            appState.students = parsed;
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Error loading records from localStorage:', err);
+      }
+      // First visit: initialize with clean demo data
+      appState.students = createSeedData();
+      saveData(false);
+    }
+
+    function saveData(showIndicator = true) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(appState.students));
+        if (showIndicator) {
+          triggerSavedIndicator();
+        }
+      } catch (err) {
+        console.error('Failed to save data:', err);
+        showToast('Warning: Could not persist changes to browser storage.', 'error');
+      }
+    }
+
+    function triggerSavedIndicator() {
+      const el = document.getElementById('saveStatusIndicator');
+      if (!el) return;
+      el.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-amber-300"></i><span>Saving...</span>`;
+      setTimeout(() => {
+        el.innerHTML = `<i class="fa-solid fa-cloud-check text-emerald-400"></i><span>All changes saved</span>`;
+      }, 350);
+    }
+
+    // ============================================================================
+    // 2. HELPER UTILITIES & COMPUTATIONS
+    // ============================================================================
+    function escapeHTML(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function getActiveStudent() {
+      return appState.students.find(s => s.id === appState.activeStudentId) || null;
+    }
+
+    function computeStudentStats(student) {
+      let present = 0;
+      let absent = 0;
+      let noShow = 0;
+      let noClass = 0;
+      let latestRecord = null;
+
+      const recordKeys = Object.keys(student.records || {}).sort();
+      recordKeys.forEach(key => {
+        const sheet = student.records[key];
+        (sheet.rows || []).forEach(row => {
+          if (row.status === 'Present') present++;
+          else if (row.status === 'Absent') absent++;
+          else if (row.status === 'No Show') noShow++;
+          else if (row.status === 'No Class') noClass++;
+
+          if (row.status || row.lesson || row.pageNumber) {
+            latestRecord = {
+              date: row.formattedDate,
+              lesson: row.lesson,
+              status: row.status
+            };
+          }
+        });
+      });
+
+      return { present, absent, noShow, noClass, latestRecord };
+    }
+
+    function formatScheduleSummary(schedule) {
+      if (!schedule || !schedule.days || schedule.days.length === 0) {
+        return 'No schedule set';
+      }
+      const shortDays = schedule.days.map(d => d.slice(0, 3)).join(', ');
+      const timeStr = schedule.time ? ` • ${formatTime12Hour(schedule.time)}` : '';
+      return `${shortDays}${timeStr}`;
+    }
+
+    function formatTime12Hour(time24) {
+      if (!time24 || !time24.includes(':')) return time24;
+      const [hStr, mStr] = time24.split(':');
+      let h = parseInt(hStr, 10);
+      if (isNaN(h)) return time24;
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      return `${h}:${mStr} ${ampm}`;
+    }
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      const bgClass = type === 'error'
+        ? 'bg-red-800 border-red-600 text-white'
+        : type === 'info'
+        ? 'bg-navy-800 border-navy-600 text-white'
+        : 'bg-navy-900 border-navy-700 text-white';
+
+      const icon = type === 'error'
+        ? '<i class="fa-solid fa-circle-exclamation text-red-300"></i>'
+        : '<i class="fa-solid fa-circle-check text-emerald-400"></i>';
+
+      toast.className = `${bgClass} border px-4 py-3 rounded-lg shadow-xl text-sm font-medium flex items-center gap-2.5 transform transition-all duration-200 translate-y-2 opacity-0 pointer-events-auto`;
+      toast.innerHTML = `${icon}<span>${escapeHTML(message)}</span>`;
+      container.appendChild(toast);
+
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 220);
+      }, 3000);
+    }
+
+    // ============================================================================
+    // 3. MODAL DIALOG SYSTEM (NO NATIVE ALERT / CONFIRM)
+    // ============================================================================
+    function openModal(htmlContent) {
+      const backdrop = document.getElementById('modalBackdrop');
+      const content = document.getElementById('modalContent');
+      content.innerHTML = htmlContent;
+      backdrop.classList.remove('hidden');
+      backdrop.classList.add('flex');
+    }
+
+    function closeModal() {
+      const backdrop = document.getElementById('modalBackdrop');
+      backdrop.classList.add('hidden');
+      backdrop.classList.remove('flex');
+    }
+
+    document.getElementById('modalBackdrop').addEventListener('click', (e) => {
+      if (e.target.id === 'modalBackdrop') closeModal();
+    });
+
+    // ============================================================================
+    // 4. NAVIGATION CONTROLLERS
+    // ============================================================================
+    function navigateToDashboard() {
+      appState.view = 'dashboard';
+      appState.activeStudentId = null;
+      appState.editingInfo = false;
+      appState.editingSchedule = false;
+      appState.addingBook = false;
+      appState.editingBookId = null;
+      render();
+    }
+
+    function openStudentProfile(studentId, initialTab = 'records') {
+      const student = appState.students.find(s => s.id === studentId);
+      if (!student) return;
+
+      appState.view = 'profile';
+      appState.activeStudentId = student.id;
+      appState.activeProfileTab = initialTab;
+      appState.editingInfo = false;
+      appState.editingSchedule = false;
+      appState.addingBook = false;
+      appState.editingBookId = null;
+
+      // Pick the most recent monthly sheet if available
+      const keys = Object.keys(student.records || {}).sort().reverse();
+      appState.activeRecordKey = keys.length > 0 ? keys[0] : null;
+      render();
+    }
+
+    function switchProfileTab(tabName) {
+      appState.activeProfileTab = tabName;
+      appState.editingInfo = false;
+      appState.editingSchedule = false;
+      appState.addingBook = false;
+      appState.editingBookId = null;
+      render();
+    }
+
+    // ============================================================================
+    // 5. DASHBOARD VIEW & STUDENT MANAGEMENT CRUD
+    // ============================================================================
+    function handleSearchInput(val) {
+      appState.searchQuery = val;
+      renderDashboardCardsOnly();
+    }
+
+    function openAddStudentModal() {
+      openModal(`
+        <div class="bg-navy-900 text-white px-6 py-4 flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <i class="fa-solid fa-user-plus text-navy-200"></i>
+            <h3 class="text-base font-bold">Add New Student</h3>
+          </div>
+          <button onclick="closeModal()" class="text-navy-200 hover:text-white transition">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+        <form onsubmit="submitAddStudent(event)" class="p-6 space-y-4">
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+              Student Name <span class="text-red-600">*</span>
+            </label>
+            <input type="text" id="newStudentName" required placeholder="e.g., Sofia Martinez"
+              class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800 focus:ring-2 focus:ring-navy-800/20" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+              Optional Student Information
+            </label>
+            <input type="text" id="newStudentInfo" placeholder="e.g., Level: B1 Intermediate • Age 24 • Business English"
+              class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800 focus:ring-2 focus:ring-navy-800/20" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+              Additional Notes
+            </label>
+            <textarea id="newStudentNotes" rows="3" placeholder="Learning goals, preferences, or background notes..."
+              class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800 focus:ring-2 focus:ring-navy-800/20"></textarea>
+          </div>
+          <div class="pt-3 border-t border-slate-200 flex items-center justify-end gap-2.5">
+            <button type="button" onclick="closeModal()"
+              class="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition">
+              Cancel
+            </button>
+            <button type="submit"
+              class="px-5 py-2 text-sm font-semibold text-white bg-navy-900 hover:bg-navy-800 rounded-lg shadow-sm transition flex items-center gap-2">
+              <i class="fa-solid fa-check"></i> Save Student
+            </button>
+          </div>
+        </form>
+      `);
+      setTimeout(() => document.getElementById('newStudentName')?.focus(), 50);
+    }
+
+    function submitAddStudent(event) {
+      event.preventDefault();
+      const nameInput = document.getElementById('newStudentName');
+      const infoInput = document.getElementById('newStudentInfo');
+      const notesInput = document.getElementById('newStudentNotes');
+
+      const name = nameInput.value.trim();
+      if (!name) {
+        showToast('Please enter a student name.', 'error');
+        return;
+      }
+
+      const newStudent = {
+        id: generateUniqueId('STU'),
+        name,
+        info: infoInput.value.trim(),
+        notes: notesInput.value.trim(),
+        schedule: {
+          days: [],
+          time: '',
+          timeZone: '',
+          duration: '50 mins',
+          notes: ''
+        },
+        books: [],
+        records: {}
+      };
+
+      appState.students.unshift(newStudent);
+      saveData();
+      closeModal();
+      showToast(`Student "${name}" added (${newStudent.id}).`);
+      render();
+    }
+
+    function openEditStudentModal(studentId, event) {
+      if (event) event.stopPropagation();
+      const student = appState.students.find(s => s.id === studentId);
+      if (!student) return;
+
+      openModal(`
+        <div class="bg-navy-900 text-white px-6 py-4 flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <i class="fa-solid fa-pen-to-square text-navy-200"></i>
+            <h3 class="text-base font-bold">Edit Student — ${escapeHTML(student.id)}</h3>
+          </div>
+          <button onclick="closeModal()" class="text-navy-200 hover:text-white transition">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+        <form onsubmit="submitEditStudentModal(event, '${student.id}')" class="p-6 space-y-4">
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+              Student Name <span class="text-red-600">*</span>
+            </label>
+            <input type="text" id="editModalStudentName" required value="${escapeHTML(student.name)}"
+              class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800 focus:ring-2 focus:ring-navy-800/20" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+              Optional Student Information
+            </label>
+            <input type="text" id="editModalStudentInfo" value="${escapeHTML(student.info)}"
+              class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800 focus:ring-2 focus:ring-navy-800/20" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+              Additional Notes
+            </label>
+            <textarea id="editModalStudentNotes" rows="3"
+              class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800 focus:ring-2 focus:ring-navy-800/20">${escapeHTML(student.notes)}</textarea>
+          </div>
+          <div class="pt-3 border-t border-slate-200 flex items-center justify-end gap-2.5">
+            <button type="button" onclick="closeModal()"
+              class="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition">
+              Cancel
+            </button>
+            <button type="submit"
+              class="px-5 py-2 text-sm font-semibold text-white bg-navy-900 hover:bg-navy-800 rounded-lg shadow-sm transition flex items-center gap-2">
+              <i class="fa-solid fa-floppy-disk"></i> Save Changes
+            </button>
+          </div>
+        </form>
+      `);
+    }
+
+    function submitEditStudentModal(event, studentId) {
+      event.preventDefault();
+      const student = appState.students.find(s => s.id === studentId);
+      if (!student) return;
+
+      const name = document.getElementById('editModalStudentName').value.trim();
+      if (!name) {
+        showToast('Student name is required.', 'error');
+        return;
+      }
+      student.name = name;
+      student.info = document.getElementById('editModalStudentInfo').value.trim();
+      student.notes = document.getElementById('editModalStudentNotes').value.trim();
+
+      saveData();
+      closeModal();
+      showToast(`Updated ${student.name}'s profile.`);
+      render();
+    }
+
+    function confirmDeleteStudent(studentId, event) {
+      if (event) event.stopPropagation();
+      const student = appState.students.find(s => s.id === studentId);
+      if (!student) return;
+
+      openModal(`
+        <div class="bg-red-700 text-white px-6 py-4 flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <h3 class="text-base font-bold">Confirm Delete Student</h3>
+          </div>
+          <button onclick="closeModal()" class="text-red-200 hover:text-white transition">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+        <div class="p-6 space-y-4">
+          <p class="text-sm text-slate-700 leading-relaxed">
+            Are you sure you want to permanently delete <strong class="text-slate-900">${escapeHTML(student.name)}</strong>
+            (<span class="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded">${escapeHTML(student.id)}</span>)?
+          </p>
+          <div class="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-800">
+            This will remove their student profile, schedule, books, and all monthly daily class records. Other students will not be affected.
+          </div>
+          <div class="pt-2 flex items-center justify-end gap-2.5">
+            <button type="button" onclick="closeModal()"
+              class="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition">
+              Cancel
+            </button>
+            <button type="button" onclick="executeDeleteStudent('${student.id}')"
+              class="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition flex items-center gap-1.5">
+              <i class="fa-solid fa-trash-can"></i> Delete Student
+            </button>
+          </div>
+        </div>
+      `);
+    }
+
+    function executeDeleteStudent(studentId) {
+      const target = appState.students.find(s => s.id === studentId);
+      appState.students = appState.students.filter(s => s.id !== studentId);
+      saveData();
+      closeModal();
+      showToast(`Deleted student "${target ? target.name : studentId}".`);
+      if (appState.activeStudentId === studentId) {
+        navigateToDashboard();
+      } else {
+        render();
+      }
+    }
+
+    function renderDashboard() {
+      const totalCount = appState.students.length;
+      return `
+        <!-- DASHBOARD TOOLBAR HEADER -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-xs p-5 mb-6">
+          <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div>
+              <div class="flex items-center gap-3">
+                <h2 class="text-xl font-bold text-navy-900 tracking-tight">Student Directory</h2>
+                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-navy-50 text-navy-900 border border-navy-200">
+                  <i class="fa-solid fa-users text-navy-700"></i>
+                  Total Students: <span id="totalStudentsBadge">${totalCount}</span>
+                </span>
+              </div>
+              <p class="text-xs sm:text-sm text-slate-500 mt-1">
+                Select a student card to manage daily class records, schedules, and learning materials.
+              </p>
+            </div>
+
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <!-- Search Student Field -->
+              <div class="relative flex-1 sm:w-72">
+                <i class="fa-solid fa-magnifying-glass text-slate-400 text-xs absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                <input
+                  type="text"
+                  id="dashboardSearchInput"
+                  value="${escapeHTML(appState.searchQuery)}"
+                  oninput="handleSearchInput(this.value)"
+                  placeholder="Search student by name..."
+                  class="w-full pl-9 pr-8 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-none focus:border-navy-800 focus:ring-2 focus:ring-navy-800/15 transition"
+                />
+                ${appState.searchQuery ? `
+                  <button onclick="appState.searchQuery=''; render();" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">
+                    <i class="fa-solid fa-circle-xmark text-xs"></i>
+                  </button>
+                ` : ''}
+              </div>
+
+              <!-- Add Student Button -->
+              <button onclick="openAddStudentModal()"
+                class="px-4 py-2 bg-navy-900 hover:bg-navy-800 active:bg-navy-950 text-white text-sm font-semibold rounded-lg shadow-sm transition flex items-center justify-center gap-2 whitespace-nowrap">
+                <i class="fa-solid fa-plus"></i>
+                <span>Add Student</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- STUDENT CARDS GRID -->
+        <div id="studentCardsGrid">
+          ${buildStudentCardsHTML()}
+        </div>
+      `;
+    }
+
+    function renderDashboardCardsOnly() {
+      const grid = document.getElementById('studentCardsGrid');
+      const badge = document.getElementById('totalStudentsBadge');
+      if (badge) badge.textContent = appState.students.length;
+      if (grid) grid.innerHTML = buildStudentCardsHTML();
+    }
+
+    function buildStudentCardsHTML() {
+      const query = appState.searchQuery.trim().toLowerCase();
+      const filtered = appState.students.filter(s =>
+        s.name.toLowerCase().includes(query) ||
+        (s.id && s.id.toLowerCase().includes(query)) ||
+        (s.info && s.info.toLowerCase().includes(query))
+      );
+
+      if (appState.students.length === 0) {
+        return `
+          <div class="bg-white rounded-xl border border-dashed border-slate-300 p-12 text-center">
+            <div class="w-14 h-14 rounded-full bg-navy-50 text-navy-800 flex items-center justify-center mx-auto mb-4 text-xl">
+              <i class="fa-solid fa-user-graduate"></i>
+            </div>
+            <h3 class="text-base font-bold text-slate-900">No Registered Students Yet</h3>
+            <p class="text-sm text-slate-500 max-w-md mx-auto mt-1 mb-5">
+              Add your first ESL student to create their schedule, track learning materials, and generate monthly class record sheets.
+            </p>
+            <button onclick="openAddStudentModal()"
+              class="px-5 py-2.5 bg-navy-900 hover:bg-navy-800 text-white text-sm font-semibold rounded-lg shadow-sm transition inline-flex items-center gap-2">
+              <i class="fa-solid fa-plus"></i> Add First Student
+            </button>
+          </div>
+        `;
+      }
+
+      if (filtered.length === 0) {
+        return `
+          <div class="bg-white rounded-xl border border-slate-200 p-10 text-center">
+            <i class="fa-solid fa-magnifying-glass text-slate-300 text-2xl mb-2"></i>
+            <h3 class="text-sm font-semibold text-slate-800">No students match "${escapeHTML(appState.searchQuery)}"</h3>
+            <p class="text-xs text-slate-500 mt-1">Try searching with a different name or clear the search filter.</p>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          ${filtered.map(student => {
+            const stats = computeStudentStats(student);
+            const scheduleText = formatScheduleSummary(student.schedule);
+            const primaryBook = (student.books && student.books.length > 0)
+              ? `${student.books[0].title}${student.books.length > 1 ? ` (+${student.books.length - 1} more)` : ''}`
+              : 'No book assigned';
+
+            const latestSnippet = stats.latestRecord
+              ? `${stats.latestRecord.date}${stats.latestRecord.status ? ` • ${stats.latestRecord.status}` : ''}`
+              : 'No daily entries yet';
+
+            return `
+              <div onclick="openStudentProfile('${student.id}', 'records')"
+                class="group bg-white rounded-xl border border-slate-200 hover:border-navy-700 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between overflow-hidden">
+                <!-- Card Top Accent Strip -->
+                <div class="h-1.5 bg-navy-900 group-hover:bg-navy-700 transition-colors"></div>
+
+                <div class="p-5 flex-1">
+                  <!-- Student Name & ID -->
+                  <div class="flex items-start justify-between gap-2 mb-3">
+                    <div>
+                      <h3 class="text-base font-bold text-navy-900 group-hover:text-navy-700 transition-colors leading-snug">
+                        ${escapeHTML(student.name)}
+                      </h3>
+                      ${student.info ? `<p class="text-xs text-slate-500 line-clamp-1 mt-0.5">${escapeHTML(student.info)}</p>` : ''}
+                    </div>
+                    <span class="font-mono text-[11px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200 shrink-0">
+                      ${escapeHTML(student.id)}
+                    </span>
+                  </div>
+
+                  <!-- Key Details List -->
+                  <div class="space-y-2 text-xs text-slate-600 mt-4 pt-3 border-t border-slate-100">
+                    <div class="flex items-center gap-2.5">
+                      <i class="fa-regular fa-clock text-navy-700 w-4 text-center"></i>
+                      <span class="truncate font-medium text-slate-700">${escapeHTML(scheduleText)}</span>
+                    </div>
+                    <div class="flex items-center gap-2.5">
+                      <i class="fa-solid fa-book-open text-navy-700 w-4 text-center"></i>
+                      <span class="truncate">${escapeHTML(primaryBook)}</span>
+                    </div>
+                    <div class="flex items-center gap-2.5">
+                      <i class="fa-solid fa-calendar-check text-emerald-600 w-4 text-center"></i>
+                      <span>Present Classes: <strong class="text-navy-900">${stats.present}</strong></span>
+                    </div>
+                    <div class="flex items-center gap-2.5">
+                      <i class="fa-solid fa-clock-rotate-left text-slate-400 w-4 text-center"></i>
+                      <span class="truncate text-slate-500">Latest: ${escapeHTML(latestSnippet)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Card Footer Actions -->
+                <div class="bg-slate-50 px-4 py-2.5 border-t border-slate-200 flex items-center justify-between gap-2">
+                  <button onclick="event.stopPropagation(); openStudentProfile('${student.id}', 'records')"
+                    class="text-xs font-semibold text-navy-900 hover:text-navy-700 flex items-center gap-1.5 py-1 px-2 rounded hover:bg-navy-50 transition">
+                    <i class="fa-solid fa-table"></i>
+                    <span>Open Record</span>
+                  </button>
+
+                  <div class="flex items-center gap-1">
+                    <button onclick="openStudentProfile('${student.id}', 'info'); event.stopPropagation();"
+                      title="View Profile"
+                      class="text-xs font-medium text-slate-600 hover:text-navy-900 px-2 py-1 rounded hover:bg-slate-200/70 transition">
+                      Profile
+                    </button>
+                    <button onclick="openEditStudentModal('${student.id}', event)"
+                      title="Edit Student"
+                      class="p-1.5 text-slate-500 hover:text-navy-900 rounded hover:bg-slate-200/70 transition">
+                      <i class="fa-solid fa-pen text-xs"></i>
+                    </button>
+                    <button onclick="confirmDeleteStudent('${student.id}', event)"
+                      title="Delete Student"
+                      class="p-1.5 text-slate-500 hover:text-red-600 rounded hover:bg-red-50 transition">
+                      <i class="fa-solid fa-trash-can text-xs"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    // ============================================================================
+    // 6. INDIVIDUAL STUDENT PROFILE VIEW
+    // ============================================================================
+    function renderStudentProfile() {
+      const student = getActiveStudent();
+      if (!student) {
+        navigateToDashboard();
+        return '';
+      }
+      const stats = computeStudentStats(student);
+
+      return `
+        <!-- PROFILE TOP HEADER BAR -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-xs p-5 mb-5 no-print">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-slate-100">
+            <div class="flex flex-wrap items-center gap-3">
+              <button onclick="navigateToDashboard()"
+                class="inline-flex items-center gap-2 text-xs font-semibold text-navy-900 bg-navy-50 hover:bg-navy-100 border border-navy-200 px-3.5 py-2 rounded-lg transition">
+                <i class="fa-solid fa-arrow-left"></i>
+                <span>Back to Dashboard</span>
+              </button>
+
+              <!-- Quick Student Switcher Dropdown -->
+              <div class="flex items-center gap-2">
+                <label for="quickStudentSwitcher" class="text-xs font-medium text-slate-500 hidden sm:inline">Switch Student:</label>
+                <select id="quickStudentSwitcher" onchange="openStudentProfile(this.value, appState.activeProfileTab)"
+                  class="text-xs font-semibold text-navy-900 bg-white border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:border-navy-800">
+                  ${appState.students.map(s => `
+                    <option value="${s.id}" ${s.id === student.id ? 'selected' : ''}>
+                      ${escapeHTML(s.name)} (${escapeHTML(s.id)})
+                    </option>
+                  `).join('')}
+                </select>
+              </div>
+            </div>
+
+            <!-- Overall Attendance Summary Pills -->
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+              <span class="px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">
+                Present: ${stats.present}
+              </span>
+              <span class="px-2.5 py-1 rounded-md bg-red-50 text-red-800 border border-red-200 font-semibold">
+                Absent: ${stats.absent}
+              </span>
+              <span class="px-2.5 py-1 rounded-md bg-amber-50 text-amber-800 border border-amber-200 font-semibold">
+                No Show: ${stats.noShow}
+              </span>
+              <span class="px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 border border-slate-200 font-semibold">
+                No Class: ${stats.noClass}
+              </span>
+            </div>
+          </div>
+
+          <!-- Student Prominent Banner & Section Tabs -->
+          <div class="pt-4 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+            <div>
+              <div class="flex items-center gap-2.5">
+                <h2 class="text-2xl font-bold text-navy-900 tracking-tight">${escapeHTML(student.name)}</h2>
+                <span class="font-mono text-xs font-semibold bg-navy-900 text-white px-2.5 py-0.5 rounded">
+                  ${escapeHTML(student.id)}
+                </span>
+              </div>
+              <p class="text-xs sm:text-sm text-slate-500 mt-1">
+                ${student.info ? escapeHTML(student.info) : 'ESL Student Profile'}
+                ${student.schedule && student.schedule.days.length ? ` • <span class="text-navy-800 font-medium">${escapeHTML(formatScheduleSummary(student.schedule))}</span>` : ''}
+              </p>
+            </div>
+
+            <!-- Three Main Profile Tabs -->
+            <div class="flex flex-wrap gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <button onclick="switchProfileTab('info')"
+                class="px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-2 ${
+                  appState.activeProfileTab === 'info'
+                    ? 'bg-navy-900 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-navy-900 hover:bg-white/60'
+                }">
+                <i class="fa-solid fa-id-card"></i>
+                <span>1. Student Information</span>
+              </button>
+
+              <button onclick="switchProfileTab('schedule')"
+                class="px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-2 ${
+                  appState.activeProfileTab === 'schedule'
+                    ? 'bg-navy-900 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-navy-900 hover:bg-white/60'
+                }">
+                <i class="fa-solid fa-calendar-days"></i>
+                <span>2. Schedule &amp; Book</span>
+              </button>
+
+              <button onclick="switchProfileTab('records')"
+                class="px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-2 ${
+                  appState.activeProfileTab === 'records'
+                    ? 'bg-navy-900 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-navy-900 hover:bg-white/60'
+                }">
+                <i class="fa-solid fa-table-list"></i>
+                <span>3. Daily Class Records</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ACTIVE TAB BODY -->
+        <div>
+          ${appState.activeProfileTab === 'info' ? renderStudentInfoTab(student) : ''}
+          ${appState.activeProfileTab === 'schedule' ? renderScheduleAndBooksTab(student) : ''}
+          ${appState.activeProfileTab === 'records' ? renderDailyRecordsTab(student) : ''}
+        </div>
+      `;
+    }
+
+    // ----------------------------------------------------------------------------
+    // TAB A: STUDENT INFORMATION
+    // ----------------------------------------------------------------------------
+    function renderStudentInfoTab(student) {
+      if (appState.editingInfo) {
+        return `
+          <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden max-w-3xl">
+            <div class="bg-navy-900 text-white px-6 py-4 flex items-center justify-between">
+              <h3 class="text-base font-bold flex items-center gap-2">
+                <i class="fa-solid fa-user-pen"></i> Edit Student Information
+              </h3>
+              <span class="font-mono text-xs text-navy-200">${escapeHTML(student.id)}</span>
+            </div>
+            <form onsubmit="saveStudentInfoProfile(event)" class="p-6 space-y-5">
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+                  Student Name <span class="text-red-600">*</span>
+                </label>
+                <input type="text" id="profInfoName" required value="${escapeHTML(student.name)}"
+                  class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800 focus:ring-2 focus:ring-navy-800/15" />
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+                  Optional Student Information
+                </label>
+                <input type="text" id="profInfoDetails" value="${escapeHTML(student.info)}"
+                  placeholder="Level, Age, Profession, Location, or Contact..."
+                  class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800 focus:ring-2 focus:ring-navy-800/15" />
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+                  Additional Notes
+                </label>
+                <textarea id="profInfoNotes" rows="4"
+                  placeholder="Learning objectives, pronunciation focus, strengths, and areas to improve..."
+                  class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800 focus:ring-2 focus:ring-navy-800/15">${escapeHTML(student.notes)}</textarea>
+              </div>
+
+              <div class="pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
+                <button type="button" onclick="appState.editingInfo = false; render();"
+                  class="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition">
+                  Cancel
+                </button>
+                <button type="submit"
+                  class="px-5 py-2 text-sm font-semibold text-white bg-navy-900 hover:bg-navy-800 rounded-lg shadow-xs transition flex items-center gap-2">
+                  <i class="fa-solid fa-floppy-disk"></i> Save Profile
+                </button>
+              </div>
+            </form>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden max-w-3xl">
+          <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+            <h3 class="text-base font-bold text-navy-900 flex items-center gap-2">
+              <i class="fa-solid fa-id-card text-navy-700"></i> Student Information
+            </h3>
+            <button onclick="appState.editingInfo = true; render();"
+              class="px-4 py-2 text-xs font-semibold text-white bg-navy-900 hover:bg-navy-800 rounded-lg shadow-xs transition flex items-center gap-2">
+              <i class="fa-solid fa-pen-to-square"></i> Edit Profile
+            </button>
+          </div>
+
+          <div class="p-6 divide-y divide-slate-100">
+            <div class="pb-4">
+              <span class="block text-xs font-semibold uppercase tracking-wider text-slate-400">Student Name</span>
+              <p class="text-base font-semibold text-slate-900 mt-1">${escapeHTML(student.name)}</p>
+            </div>
+
+            <div class="py-4">
+              <span class="block text-xs font-semibold uppercase tracking-wider text-slate-400">Student ID</span>
+              <p class="font-mono text-sm font-medium text-navy-900 mt-1">${escapeHTML(student.id)}</p>
+            </div>
+
+            <div class="py-4">
+              <span class="block text-xs font-semibold uppercase tracking-wider text-slate-400">Optional Student Information</span>
+              <p class="text-sm text-slate-800 mt-1">
+                ${student.info ? escapeHTML(student.info) : '<span class="italic text-slate-400">No additional profile info provided.</span>'}
+              </p>
+            </div>
+
+            <div class="pt-4">
+              <span class="block text-xs font-semibold uppercase tracking-wider text-slate-400">Additional Notes</span>
+              <div class="mt-2 p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-700 whitespace-pre-line">
+                ${student.notes ? escapeHTML(student.notes) : '<span class="italic text-slate-400">No notes recorded for this student.</span>'}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function saveStudentInfoProfile(event) {
+      event.preventDefault();
+      const student = getActiveStudent();
+      if (!student) return;
+
+      const name = document.getElementById('profInfoName').value.trim();
+      if (!name) {
+        showToast('Student Name cannot be empty.', 'error');
+        return;
+      }
+
+      student.name = name;
+      student.info = document.getElementById('profInfoDetails').value.trim();
+      student.notes = document.getElementById('profInfoNotes').value.trim();
+      appState.editingInfo = false;
+
+      saveData();
+      showToast('Student profile updated.');
+      render();
+    }
+
+    // ----------------------------------------------------------------------------
+    // TAB B & C: SCHEDULE INFORMATION & BOOK / LEARNING MATERIALS
+    // ----------------------------------------------------------------------------
+    function renderScheduleAndBooksTab(student) {
+      const sched = student.schedule || { days: [], time: '', timeZone: '', duration: '', notes: '' };
+      const books = student.books || [];
+
+      return `
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <!-- LEFT COLUMN (5 cols): CLASS SCHEDULE -->
+          <div class="lg:col-span-5">
+            <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+              <div class="px-5 py-4 bg-navy-900 text-white flex items-center justify-between">
+                <h3 class="text-sm font-bold uppercase tracking-wider flex items-center gap-2">
+                  <i class="fa-regular fa-calendar-check"></i> Class Schedule
+                </h3>
+                ${!appState.editingSchedule ? `
+                  <button onclick="appState.editingSchedule = true; render();"
+                    class="px-3 py-1.5 text-xs font-semibold bg-white text-navy-900 hover:bg-navy-50 rounded-lg transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-pen"></i> Edit Schedule
+                  </button>
+                ` : ''}
+              </div>
+
+              ${appState.editingSchedule ? `
+                <form onsubmit="saveStudentSchedule(event)" class="p-5 space-y-4">
+                  <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">
+                      Class Days (Select Multiple)
+                    </label>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-2">
+                      ${DAYS_OF_WEEK.map(day => {
+                        const checked = (sched.days || []).includes(day);
+                        return `
+                          <label class="flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium cursor-pointer transition ${
+                            checked
+                              ? 'bg-navy-50 border-navy-700 text-navy-900 font-semibold'
+                              : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                          }">
+                            <input type="checkbox" name="schedDays" value="${day}" ${checked ? 'checked' : ''}
+                              class="rounded text-navy-900 focus:ring-navy-800" />
+                            <span>${day}</span>
+                          </label>
+                        `;
+                      }).join('')}
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                        Class Time
+                      </label>
+                      <input type="time" id="schedTime" value="${escapeHTML(sched.time)}"
+                        class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                    </div>
+
+                    <div>
+                      <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                        Class Duration
+                      </label>
+                      <input type="text" id="schedDuration" value="${escapeHTML(sched.duration)}" placeholder="e.g., 50 mins"
+                        class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                      Time Zone (Optional)
+                    </label>
+                    <input type="text" id="schedTimeZone" value="${escapeHTML(sched.timeZone)}"
+                      placeholder="e.g., Asia/Manila (PHT), Asia/Tokyo (JST)"
+                      class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                      Additional Schedule Notes
+                    </label>
+                    <textarea id="schedNotes" rows="3" placeholder="Meeting platform, reminders, or rescheduling rules..."
+                      class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800">${escapeHTML(sched.notes)}</textarea>
+                  </div>
+
+                  <div class="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+                    <button type="button" onclick="appState.editingSchedule = false; render();"
+                      class="px-3.5 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition">
+                      Cancel
+                    </button>
+                    <button type="submit"
+                      class="px-4 py-2 text-xs font-semibold text-white bg-navy-900 hover:bg-navy-800 rounded-lg shadow-xs transition flex items-center gap-1.5">
+                      <i class="fa-solid fa-floppy-disk"></i> Save Schedule
+                    </button>
+                  </div>
+                </form>
+              ` : `
+                <div class="p-5 space-y-4">
+                  <div>
+                    <span class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Class Days</span>
+                    ${(sched.days && sched.days.length > 0) ? `
+                      <div class="flex flex-wrap gap-1.5">
+                        ${sched.days.map(d => `
+                          <span class="px-2.5 py-1 rounded-md text-xs font-semibold bg-navy-50 text-navy-900 border border-navy-200">
+                            ${escapeHTML(d)}
+                          </span>
+                        `).join('')}
+                      </div>
+                    ` : `<p class="text-sm italic text-slate-400">No class days selected yet.</p>`}
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-4 pt-3 border-t border-slate-100">
+                    <div>
+                      <span class="block text-xs font-semibold uppercase tracking-wider text-slate-400">Class Time</span>
+                      <p class="text-sm font-semibold text-slate-800 mt-0.5">
+                        ${sched.time ? escapeHTML(formatTime12Hour(sched.time)) : '<span class="text-slate-400 font-normal">—</span>'}
+                      </p>
+                    </div>
+                    <div>
+                      <span class="block text-xs font-semibold uppercase tracking-wider text-slate-400">Duration</span>
+                      <p class="text-sm font-semibold text-slate-800 mt-0.5">
+                        ${sched.duration ? escapeHTML(sched.duration) : '<span class="text-slate-400 font-normal">—</span>'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div class="pt-3 border-t border-slate-100">
+                    <span class="block text-xs font-semibold uppercase tracking-wider text-slate-400">Time Zone</span>
+                    <p class="text-sm text-slate-800 mt-0.5">
+                      ${sched.timeZone ? escapeHTML(sched.timeZone) : '<span class="text-slate-400 italic">Not specified</span>'}
+                    </p>
+                  </div>
+
+                  <div class="pt-3 border-t border-slate-100">
+                    <span class="block text-xs font-semibold uppercase tracking-wider text-slate-400">Additional Schedule Notes</span>
+                    <p class="text-sm text-slate-700 mt-1 bg-slate-50 p-3 rounded-lg border border-slate-200 whitespace-pre-line">
+                      ${sched.notes ? escapeHTML(sched.notes) : '<span class="text-slate-400 italic">No schedule notes added.</span>'}
+                    </p>
+                  </div>
+                </div>
+              `}
+            </div>
+          </div>
+
+          <!-- RIGHT COLUMN (7 cols): BOOKS / LEARNING MATERIALS -->
+          <div class="lg:col-span-7">
+            <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+              <div class="px-5 py-4 bg-navy-900 text-white flex items-center justify-between">
+                <h3 class="text-sm font-bold uppercase tracking-wider flex items-center gap-2">
+                  <i class="fa-solid fa-book-open"></i> Books &amp; Learning Materials (${books.length})
+                </h3>
+                ${!appState.addingBook ? `
+                  <button onclick="appState.addingBook = true; appState.editingBookId = null; render();"
+                    class="px-3 py-1.5 text-xs font-semibold bg-white text-navy-900 hover:bg-navy-50 rounded-lg transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-plus"></i> Add Book
+                  </button>
+                ` : ''}
+              </div>
+
+              <div class="p-5 space-y-4">
+                <!-- ADD NEW BOOK FORM -->
+                ${appState.addingBook ? `
+                  <form onsubmit="submitAddBook(event)" class="bg-navy-50/70 border border-navy-200 rounded-xl p-4 space-y-3">
+                    <div class="flex items-center justify-between border-b border-navy-200 pb-2">
+                      <h4 class="text-xs font-bold uppercase tracking-wider text-navy-900">New Book / Learning Material</h4>
+                      <button type="button" onclick="appState.addingBook = false; render();" class="text-slate-500 hover:text-slate-800">
+                        <i class="fa-solid fa-xmark"></i>
+                      </button>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Book Title <span class="text-red-600">*</span></label>
+                        <input type="text" id="newBookTitle" required placeholder="e.g., English File Intermediate"
+                          class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                      </div>
+                      <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Book Level</label>
+                        <input type="text" id="newBookLevel" placeholder="e.g., B1 / Level 3"
+                          class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                      </div>
+                      <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Unit / Chapter</label>
+                        <input type="text" id="newBookUnit" placeholder="e.g., Unit 2: Daily Routines"
+                          class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                      </div>
+                      <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Current Page</label>
+                        <input type="text" id="newBookPage" placeholder="e.g., 14"
+                          class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                      </div>
+                    </div>
+                    <div>
+                      <label class="block text-xs font-semibold text-slate-700 mb-1">Additional Notes</label>
+                      <input type="text" id="newBookNotes" placeholder="Audio files, workbook pages, or supplementary links..."
+                        class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                    </div>
+                    <div class="flex justify-end gap-2 pt-2">
+                      <button type="button" onclick="appState.addingBook = false; render();"
+                        class="px-3.5 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50">
+                        Cancel
+                      </button>
+                      <button type="submit"
+                        class="px-4 py-1.5 text-xs font-semibold text-white bg-navy-900 hover:bg-navy-800 rounded-lg shadow-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-floppy-disk"></i> Save Book
+                      </button>
+                    </div>
+                  </form>
+                ` : ''}
+
+                <!-- BOOKS LIST -->
+                ${books.length === 0 && !appState.addingBook ? `
+                  <div class="text-center py-10 border border-dashed border-slate-300 rounded-xl">
+                    <i class="fa-solid fa-books text-slate-300 text-2xl mb-2"></i>
+                    <p class="text-sm font-semibold text-slate-700">No Books or Materials Assigned</p>
+                    <p class="text-xs text-slate-500 mt-1 mb-4">Click "Add Book" to assign textbooks, articles, or curricula to this student.</p>
+                    <button onclick="appState.addingBook = true; render();"
+                      class="px-4 py-2 text-xs font-semibold text-white bg-navy-900 hover:bg-navy-800 rounded-lg inline-flex items-center gap-1.5">
+                      <i class="fa-solid fa-plus"></i> Add First Book
+                    </button>
+                  </div>
+                ` : ''}
+
+                ${books.map(book => {
+                  const isEditing = appState.editingBookId === book.id;
+                  if (isEditing) {
+                    return `
+                      <form onsubmit="submitEditBook(event, '${book.id}')" class="bg-slate-50 border-2 border-navy-800 rounded-xl p-4 space-y-3">
+                        <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                          <h4 class="text-xs font-bold uppercase tracking-wider text-navy-900">Editing Book</h4>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Book Title <span class="text-red-600">*</span></label>
+                            <input type="text" id="editBookTitle-${book.id}" required value="${escapeHTML(book.title)}"
+                              class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                          </div>
+                          <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Book Level</label>
+                            <input type="text" id="editBookLevel-${book.id}" value="${escapeHTML(book.level)}"
+                              class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                          </div>
+                          <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Unit / Chapter</label>
+                            <input type="text" id="editBookUnit-${book.id}" value="${escapeHTML(book.unit)}"
+                              class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                          </div>
+                          <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Current Page</label>
+                            <input type="text" id="editBookPage-${book.id}" value="${escapeHTML(book.currentPage)}"
+                              class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                          </div>
+                        </div>
+                        <div>
+                          <label class="block text-xs font-semibold text-slate-700 mb-1">Additional Notes</label>
+                          <input type="text" id="editBookNotes-${book.id}" value="${escapeHTML(book.notes)}"
+                            class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-navy-800" />
+                        </div>
+                        <div class="flex justify-end gap-2 pt-2">
+                          <button type="button" onclick="appState.editingBookId = null; render();"
+                            class="px-3.5 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50">
+                            Cancel
+                          </button>
+                          <button type="submit"
+                            class="px-4 py-1.5 text-xs font-semibold text-white bg-navy-900 hover:bg-navy-800 rounded-lg shadow-xs flex items-center gap-1.5">
+                            <i class="fa-solid fa-floppy-disk"></i> Save Book
+                          </button>
+                        </div>
+                      </form>
+                    `;
+                  }
+
+                  return `
+                    <div class="border border-slate-200 hover:border-navy-300 rounded-xl p-4 bg-white transition">
+                      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                        <div>
+                          <div class="flex flex-wrap items-center gap-2">
+                            <h4 class="text-base font-bold text-navy-900">${escapeHTML(book.title)}</h4>
+                            ${book.level ? `
+                              <span class="px-2 py-0.5 text-[11px] font-semibold bg-navy-50 text-navy-800 border border-navy-200 rounded">
+                                ${escapeHTML(book.level)}
+                              </span>
+                            ` : ''}
+                          </div>
+                          <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 mt-1.5">
+                            <span><strong>Unit / Chapter:</strong> ${book.unit ? escapeHTML(book.unit) : '—'}</span>
+                            <span><strong>Current Page:</strong> <span class="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-navy-900 font-semibold">${book.currentPage ? escapeHTML(book.currentPage) : '—'}</span></span>
+                          </div>
+                          ${book.notes ? `
+                            <p class="text-xs text-slate-500 mt-2 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
+                              <i class="fa-regular fa-note-sticky text-slate-400 mr-1"></i> ${escapeHTML(book.notes)}
+                            </p>
+                          ` : ''}
+                        </div>
+
+                        <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-start">
+                          <button onclick="appState.editingBookId = '${book.id}'; appState.addingBook = false; render();"
+                            class="px-2.5 py-1.5 text-xs font-semibold text-navy-900 bg-navy-50 hover:bg-navy-100 rounded-lg transition flex items-center gap-1">
+                            <i class="fa-solid fa-pen"></i> Edit Book
+                          </button>
+                          <button onclick="confirmDeleteBook('${book.id}')"
+                            class="px-2.5 py-1.5 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition flex items-center gap-1">
+                            <i class="fa-solid fa-trash-can"></i> Delete Book
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function saveStudentSchedule(event) {
+      event.preventDefault();
+      const student = getActiveStudent();
+      if (!student) return;
+
+      const checkedBoxes = document.querySelectorAll('input[name="schedDays"]:checked');
+      const days = Array.from(checkedBoxes).map(cb => cb.value);
+
+      student.schedule = {
+        days,
+        time: document.getElementById('schedTime').value,
+        timeZone: document.getElementById('schedTimeZone').value.trim(),
+        duration: document.getElementById('schedDuration').value.trim(),
+        notes: document.getElementById('schedNotes').value.trim()
+      };
+
+      appState.editingSchedule = false;
+      saveData();
+      showToast('Class schedule saved.');
+      render();
+    }
+
+    function submitAddBook(event) {
+      event.preventDefault();
+      const student = getActiveStudent();
+      if (!student) return;
+
+      const title = document.getElementById('newBookTitle').value.trim();
+      if (!title) {
+        showToast('Book Title is required.', 'error');
+        return;
+      }
+
+      if (!student.books) student.books = [];
+      student.books.push({
+        id: generateUniqueId('BK'),
+        title,
+        level: document.getElementById('newBookLevel').value.trim(),
+        unit: document.getElementById('newBookUnit').value.trim(),
+        currentPage: document.getElementById('newBookPage').value.trim(),
+        notes: document.getElementById('newBookNotes').value.trim()
+      });
+
+      appState.addingBook = false;
+      saveData();
+      showToast(`Added "${title}" to learning materials.`);
+      render();
+    }
+
+    function submitEditBook(event, bookId) {
+      event.preventDefault();
+      const student = getActiveStudent();
+      if (!student) return;
+
+      const book = (student.books || []).find(b => b.id === bookId);
+      if (!book) return;
+
+      const title = document.getElementById(`editBookTitle-${bookId}`).value.trim();
+      if (!title) {
+        showToast('Book Title is required.', 'error');
+        return;
+      }
+
+      book.title = title;
+      book.level = document.getElementById(`editBookLevel-${bookId}`).value.trim();
+      book.unit = document.getElementById(`editBookUnit-${bookId}`).value.trim();
+      book.currentPage = document.getElementById(`editBookPage-${bookId}`).value.trim();
+      book.notes = document.getElementById(`editBookNotes-${bookId}`).value.trim();
+
+      appState.editingBookId = null;
+      saveData();
+      showToast(`Updated "${title}".`);
+      render();
+    }
+
+    function confirmDeleteBook(bookId) {
+      const student = getActiveStudent();
+      if (!student) return;
+      const book = (student.books || []).find(b => b.id === bookId);
+      if (!book) return;
+
+      openModal(`
+        <div class="bg-navy-900 text-white px-6 py-4 flex items-center justify-between">
+          <h3 class="text-base font-bold">Delete Learning Material</h3>
+          <button onclick="closeModal()" class="text-navy-200 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="p-6 space-y-4">
+          <p class="text-sm text-slate-700">
+            Remove <strong>${escapeHTML(book.title)}</strong> from ${escapeHTML(student.name)}'s book list?
+          </p>
+          <div class="flex justify-end gap-2.5 pt-2">
+            <button onclick="closeModal()" class="px-4 py-2 text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">Cancel</button>
+            <button onclick="executeDeleteBook('${book.id}')" class="px-4 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg">Delete Book</button>
+          </div>
+        </div>
+      `);
+    }
+
+    function executeDeleteBook(bookId) {
+      const student = getActiveStudent();
+      if (!student) return;
+      student.books = (student.books || []).filter(b => b.id !== bookId);
+      saveData();
+      closeModal();
+      showToast('Book removed.');
+      render();
+    }
+
+    // ----------------------------------------------------------------------------
+    // TAB C: MONTH/YEAR MANAGEMENT & GOOGLE SHEETS DAILY CLASS RECORD SPREADSHEET
+    // ----------------------------------------------------------------------------
+    function renderDailyRecordsTab(student) {
+      const recordKeys = Object.keys(student.records || {}).sort();
+      // Ensure activeRecordKey is valid for this student
+      if (!appState.activeRecordKey || !student.records[appState.activeRecordKey]) {
+        appState.activeRecordKey = recordKeys.length > 0 ? recordKeys[recordKeys.length - 1] : null;
+      }
+
+      const activeSheet = appState.activeRecordKey ? student.records[appState.activeRecordKey] : null;
+      const now = new Date();
+      const defaultMonth = now.getMonth();
+      const defaultYear = now.getFullYear();
+
+      // Calculate monthly status summary for active sheet
+      let sheetPresent = 0, sheetAbsent = 0, sheetNoShow = 0, sheetNoClass = 0;
+      if (activeSheet && activeSheet.rows) {
+        activeSheet.rows.forEach(r => {
+          if (r.status === 'Present') sheetPresent++;
+          else if (r.status === 'Absent') sheetAbsent++;
+          else if (r.status === 'No Show') sheetNoShow++;
+          else if (r.status === 'No Class') sheetNoClass++;
+        });
+      }
+
+      return `
+        <!-- MONTH & YEAR GENERATOR + SHEET CONTROLS TOOLBAR -->
+        <div class="bg-white rounded-t-xl border border-slate-200 p-4 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 no-print">
+          <!-- Left: Add New Month / Year Controls -->
+          <div class="flex flex-wrap items-center gap-2.5">
+            <span class="text-xs font-bold uppercase tracking-wider text-navy-900 flex items-center gap-1.5 mr-1">
+              <i class="fa-solid fa-calendar-plus text-navy-700"></i> Create Monthly Sheet:
+            </span>
+
+            <select id="selectNewMonth" aria-label="Select Month"
+              class="text-sm font-medium text-slate-800 bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:bg-white focus:outline-none focus:border-navy-800">
+              ${MONTHS.map((m, idx) => `
+                <option value="${idx}" ${idx === defaultMonth ? 'selected' : ''}>${m}</option>
+              `).join('')}
+            </select>
+
+            <select id="selectNewYear" aria-label="Select Year"
+              class="text-sm font-medium text-slate-800 bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:bg-white focus:outline-none focus:border-navy-800">
+              ${Array.from({ length: 11 }, (_, i) => defaultYear - 3 + i).map(yr => `
+                <option value="${yr}" ${yr === defaultYear ? 'selected' : ''}>${yr}</option>
+              `).join('')}
+            </select>
+
+            <button onclick="handleAddMonthlyRecord()"
+              class="px-4 py-2 bg-navy-900 hover:bg-navy-800 text-white text-xs sm:text-sm font-semibold rounded-lg shadow-xs transition flex items-center gap-1.5">
+              <i class="fa-solid fa-plus"></i>
+              <span>Add Month</span>
+            </button>
+          </div>
+
+          <!-- Right: Existing Month Switcher + Export / Print -->
+          <div class="flex flex-wrap items-center gap-2.5">
+            ${recordKeys.length > 0 ? `
+              <div class="flex items-center gap-2">
+                <label for="existingMonthSelector" class="text-xs font-semibold text-slate-500">Saved Sheets:</label>
+                <select id="existingMonthSelector" onchange="switchMonthlySheet(this.value)"
+                  class="text-sm font-semibold text-navy-900 bg-navy-50 border border-navy-200 rounded-lg px-3 py-2 focus:outline-none focus:border-navy-800">
+                  ${recordKeys.map(k => {
+                    const rec = student.records[k];
+                    return `<option value="${k}" ${k === appState.activeRecordKey ? 'selected' : ''}>${rec.monthName} ${rec.year}</option>`;
+                  }).join('')}
+                </select>
+              </div>
+
+              <button onclick="exportCurrentSheetCSV()"
+                class="px-3 py-2 text-xs font-semibold text-navy-900 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg transition flex items-center gap-1.5">
+                <i class="fa-solid fa-file-csv text-emerald-700"></i>
+                <span>Export CSV</span>
+              </button>
+
+              <button onclick="window.print()"
+                class="px-3 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg transition flex items-center gap-1.5">
+                <i class="fa-solid fa-print"></i>
+                <span>Print</span>
+              </button>
+            ` : ''}
+          </div>
+        </div>
+
+        <!-- ACTIVE SPREADSHEET AREA -->
+        ${activeSheet ? `
+          <!-- Sheet Sub-Header Formula/Status Bar (Google Sheets Style) -->
+          <div class="bg-slate-50 border-x border-b border-slate-200 px-4 py-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs">
+            <div class="flex items-center gap-3">
+              <span class="font-bold text-navy-900 text-sm flex items-center gap-2">
+                <i class="fa-solid fa-table text-navy-700"></i>
+                ${escapeHTML(activeSheet.monthName)} ${activeSheet.year} — Daily Class Record
+              </span>
+              <span class="text-slate-500 hidden md:inline">
+                (${activeSheet.rows.length} Mon–Fri weekdays auto-generated)
+              </span>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3">
+              <span class="text-emerald-700 font-semibold">Present: ${sheetPresent}</span>
+              <span class="text-slate-300">|</span>
+              <span class="text-red-700 font-semibold">Absent: ${sheetAbsent}</span>
+              <span class="text-slate-300">|</span>
+              <span class="text-amber-700 font-semibold">No Show: ${sheetNoShow}</span>
+              <span class="text-slate-300">|</span>
+              <span class="text-slate-600 font-semibold">No Class: ${sheetNoClass}</span>
+              <button onclick="confirmDeleteMonthlySheet('${activeSheet.key}')" title="Delete this monthly sheet"
+                class="ml-2 text-slate-400 hover:text-red-600 transition no-print">
+                <i class="fa-solid fa-trash-can"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- FULL-WIDTH GOOGLE SHEETS SPREADSHEET TABLE -->
+          <div class="bg-white border-x border-b border-slate-300 overflow-x-auto shadow-xs">
+            <table class="sheet-table min-w-[820px]">
+              <thead>
+                <tr>
+                  <th class="w-12 text-center">#</th>
+                  <th class="w-48 text-left">
+                    <div class="flex items-center justify-between">
+                      <span>Date (Mon–Fri)</span>
+                      <i class="fa-solid fa-lock text-[10px] text-slate-400" title="Auto-generated non-editable date"></i>
+                    </div>
+                  </th>
+                  <th class="w-36 text-left">Page Number</th>
+                  <th class="w-72 text-left">Lesson</th>
+                  <th class="text-left">Notes</th>
+                  <th class="w-44 text-left">Class Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${activeSheet.rows.map((row, idx) => {
+                  const statusMeta = STATUS_OPTIONS.find(opt => opt.value === row.status) || STATUS_OPTIONS[0];
+                  return `
+                    <tr class="bg-white">
+                      <!-- Row Number -->
+                      <td class="row-index bg-slate-50 text-center text-xs font-mono text-slate-500 select-none px-2">
+                        ${idx + 1}
+                      </td>
+
+                      <!-- Non-Editable Auto-Generated Date -->
+                      <td class="bg-slate-50/60 px-3 py-2 select-none">
+                        <div class="flex items-center justify-between gap-2">
+                          <span class="text-sm font-medium text-navy-900">${escapeHTML(row.formattedDate)}</span>
+                          <span class="text-[11px] font-mono font-semibold px-1.5 py-0.5 rounded bg-navy-50 text-navy-800 border border-navy-100">
+                            ${escapeHTML(row.dayLabel)}
+                          </span>
+                        </div>
+                      </td>
+
+                      <!-- Editable Page Number -->
+                      <td>
+                        <input
+                          type="text"
+                          value="${escapeHTML(row.pageNumber)}"
+                          placeholder="e.g. 12–15"
+                          aria-label="Page Number for ${escapeHTML(row.formattedDate)}"
+                          onchange="updateDailyRecordCell('${activeSheet.key}', ${idx}, 'pageNumber', this.value)"
+                          onkeydown="handleGridKeyNav(event, ${idx}, 0)"
+                          data-row="${idx}" data-col="0"
+                          class="sheet-cell-input font-mono text-xs sm:text-sm"
+                        />
+                      </td>
+
+                      <!-- Editable Lesson -->
+                      <td>
+                        <input
+                          type="text"
+                          value="${escapeHTML(row.lesson)}"
+                          placeholder="Enter lesson topic..."
+                          aria-label="Lesson for ${escapeHTML(row.formattedDate)}"
+                          onchange="updateDailyRecordCell('${activeSheet.key}', ${idx}, 'lesson', this.value)"
+                          onkeydown="handleGridKeyNav(event, ${idx}, 1)"
+                          data-row="${idx}" data-col="1"
+                          class="sheet-cell-input"
+                        />
+                      </td>
+
+                      <!-- Editable Notes -->
+                      <td>
+                        <input
+                          type="text"
+                          value="${escapeHTML(row.notes)}"
+                          placeholder="Class notes, homework, feedback..."
+                          aria-label="Notes for ${escapeHTML(row.formattedDate)}"
+                          onchange="updateDailyRecordCell('${activeSheet.key}', ${idx}, 'notes', this.value)"
+                          onkeydown="handleGridKeyNav(event, ${idx}, 2)"
+                          data-row="${idx}" data-col="2"
+                          class="sheet-cell-input"
+                        />
+                      </td>
+
+                      <!-- Class Status Dropdown -->
+                      <td class="${statusMeta.className}">
+                        <select
+                          aria-label="Class Status for ${escapeHTML(row.formattedDate)}"
+                          onchange="updateDailyRecordStatus('${activeSheet.key}', ${idx}, this)"
+                          data-row="${idx}" data-col="3"
+                          class="sheet-cell-select ${statusMeta.className}">
+                          ${STATUS_OPTIONS.map(opt => `
+                            <option value="${opt.value}" ${row.status === opt.value ? 'selected' : ''} class="bg-white text-slate-900 font-medium">
+                              ${opt.label}
+                            </option>
+                          `).join('')}
+                        </select>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- GOOGLE SHEETS STYLE BOTTOM SHEET TABS -->
+          <div class="bg-slate-100 border-x border-b border-slate-300 rounded-b-xl px-3 flex items-center gap-1 overflow-x-auto no-print">
+            <button onclick="handleAddMonthlyRecord()" title="Add selected month sheet"
+              class="px-2.5 py-2 text-slate-600 hover:text-navy-900 hover:bg-slate-200/70 rounded transition text-xs font-bold">
+              <i class="fa-solid fa-plus"></i>
+            </button>
+            <div class="h-4 w-[1px] bg-slate-300 mx-1"></div>
+            ${recordKeys.map(k => {
+              const sheet = student.records[k];
+              const isActive = k === activeSheet.key;
+              return `
+                <button onclick="switchMonthlySheet('${k}')"
+                  class="sheet-tab px-4 py-2.5 text-xs whitespace-nowrap ${
+                    isActive ? 'active' : 'text-slate-600 hover:bg-slate-200/60 hover:text-navy-900'
+                  }">
+                  ${escapeHTML(sheet.monthName.slice(0, 3))} ${sheet.year}
+                </button>
+              `;
+            }).join('')}
+          </div>
+        ` : `
+          <!-- EMPTY MONTHLY RECORD PROMPT -->
+          <div class="bg-white border-x border-b border-slate-200 rounded-b-xl p-12 text-center">
+            <div class="w-14 h-14 rounded-full bg-navy-50 text-navy-900 flex items-center justify-center mx-auto mb-3 text-xl">
+              <i class="fa-solid fa-calendar-week"></i>
+            </div>
+            <h4 class="text-base font-bold text-navy-900">No Monthly Class Records Yet</h4>
+            <p class="text-sm text-slate-500 max-w-md mx-auto mt-1 mb-5">
+              Select a <strong>Month</strong> and <strong>Year</strong> above and click <strong>Add Month</strong> to automatically generate all Monday–Friday class dates.
+            </p>
+            <button onclick="handleAddMonthlyRecord()"
+              class="px-5 py-2.5 bg-navy-900 hover:bg-navy-800 text-white text-sm font-semibold rounded-lg shadow-xs transition inline-flex items-center gap-2">
+              <i class="fa-solid fa-plus"></i> Generate ${MONTHS[defaultMonth]} ${defaultYear} Sheet
+            </button>
+          </div>
+        `}
+      `;
+    }
+
+    function handleAddMonthlyRecord() {
+      const student = getActiveStudent();
+      if (!student) return;
+
+      const monthSelect = document.getElementById('selectNewMonth');
+      const yearSelect = document.getElementById('selectNewYear');
+      const monthIndex = monthSelect ? parseInt(monthSelect.value, 10) : new Date().getMonth();
+      const year = yearSelect ? parseInt(yearSelect.value, 10) : new Date().getFullYear();
+
+      const key = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+      if (!student.records) student.records = {};
+
+      // Prevent duplicate monthly records for the same student
+      if (student.records[key]) {
+        appState.activeRecordKey = key;
+        showToast(`${MONTHS[monthIndex]} ${year} already exists for ${student.name}. Switched to existing sheet.`, 'info');
+        render();
+        return;
+      }
+
+      const generatedRows = generateWeekdaysForMonth(year, monthIndex);
+      student.records[key] = {
+        key,
+        year,
+        monthIndex,
+        monthName: MONTHS[monthIndex],
+        rows: generatedRows
+      };
+
+      appState.activeRecordKey = key;
+      saveData();
+      showToast(`Generated ${generatedRows.length} weekday rows for ${MONTHS[monthIndex]} ${year}.`);
+      render();
+    }
+
+    function switchMonthlySheet(key) {
+      appState.activeRecordKey = key;
+      render();
+    }
+
+    function updateDailyRecordCell(sheetKey, rowIndex, field, value) {
+      const student = getActiveStudent();
+      if (!student || !student.records[sheetKey]) return;
+      const row = student.records[sheetKey].rows[rowIndex];
+      if (!row) return;
+
+      row[field] = value;
+      saveData();
+    }
+
+    function updateDailyRecordStatus(sheetKey, rowIndex, selectEl) {
+      const student = getActiveStudent();
+      if (!student || !student.records[sheetKey]) return;
+      const row = student.records[sheetKey].rows[rowIndex];
+      if (!row) return;
+
+      row.status = selectEl.value;
+      saveData();
+      // Re-render to immediately update status pill colors & summary counters
+      render();
+    }
+
+    // Keyboard navigation (Enter moves down to same column in next row, like Google Sheets)
+    function handleGridKeyNav(event, rowIndex, colIndex) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        const nextInput = document.querySelector(`[data-row="${rowIndex + 1}"][data-col="${colIndex}"]`);
+        if (nextInput) {
+          nextInput.focus();
+          if (nextInput.select) nextInput.select();
+        }
+      }
+    }
+
+    function confirmDeleteMonthlySheet(sheetKey) {
+      const student = getActiveStudent();
+      if (!student || !student.records[sheetKey]) return;
+      const sheet = student.records[sheetKey];
+
+      openModal(`
+        <div class="bg-red-700 text-white px-6 py-4 flex items-center justify-between">
+          <h3 class="text-base font-bold">Delete Monthly Sheet</h3>
+          <button onclick="closeModal()" class="text-red-200 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="p-6 space-y-4">
+          <p class="text-sm text-slate-700">
+            Delete the entire <strong>${escapeHTML(sheet.monthName)} ${sheet.year}</strong> class record sheet for <strong>${escapeHTML(student.name)}</strong>?
+          </p>
+          <div class="flex justify-end gap-2.5 pt-2">
+            <button onclick="closeModal()" class="px-4 py-2 text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">Cancel</button>
+            <button onclick="executeDeleteMonthlySheet('${sheetKey}')" class="px-4 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg">Delete Sheet</button>
+          </div>
+        </div>
+      `);
+    }
+
+    function executeDeleteMonthlySheet(sheetKey) {
+      const student = getActiveStudent();
+      if (!student || !student.records[sheetKey]) return;
+      delete student.records[sheetKey];
+      const remaining = Object.keys(student.records).sort();
+      appState.activeRecordKey = remaining.length > 0 ? remaining[remaining.length - 1] : null;
+      saveData();
+      closeModal();
+      showToast('Monthly sheet deleted.');
+      render();
+    }
+
+    // ============================================================================
+    // 7. EXPORT & BACKUP UTILITIES
+    // ============================================================================
+    function exportCurrentSheetCSV() {
+      const student = getActiveStudent();
+      if (!student || !appState.activeRecordKey || !student.records[appState.activeRecordKey]) return;
+      const sheet = student.records[appState.activeRecordKey];
+
+      const csvEscape = (val) => `"${String(val || '').replace(/"/g, '""')}"`;
+      const lines = [
+        [`Student Name`, student.name, `Student ID`, student.id].map(csvEscape).join(','),
+        [`Month`, `${sheet.monthName} ${sheet.year}`].map(csvEscape).join(','),
+        '',
+        ['Date', 'Day', 'Page Number', 'Lesson', 'Notes', 'Class Status'].map(csvEscape).join(',')
+      ];
+
+      sheet.rows.forEach(r => {
+        lines.push([
+          r.formattedDate,
+          r.dayLabel,
+          r.pageNumber,
+          r.lesson,
+          r.notes,
+          r.status
+        ].map(csvEscape).join(','));
+      });
+
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${student.name.replace(/\s+/g, '_')}_${sheet.monthName}_${sheet.year}_Record.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast(`Exported ${sheet.monthName} ${sheet.year} CSV.`);
+    }
+
+    function exportAllBackupJSON() {
+      const blob = new Blob([JSON.stringify(appState.students, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ESL_Student_Records_Backup_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast('Downloaded full JSON backup.');
+    }
+
+    function confirmResetDemoData() {
+      openModal(`
+        <div class="bg-navy-900 text-white px-6 py-4 flex items-center justify-between">
+          <h3 class="text-base font-bold">Restore Sample ESL Demo Data</h3>
+          <button onclick="closeModal()" class="text-navy-200 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="p-6 space-y-4">
+          <p class="text-sm text-slate-700">
+            This will replace current local data with two sample ESL students, schedules, books, and current month class records.
+          </p>
+          <div class="flex justify-end gap-2.5 pt-2">
+            <button onclick="closeModal()" class="px-4 py-2 text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">Cancel</button>
+            <button onclick="executeResetDemoData()" class="px-4 py-2 text-sm font-semibold bg-navy-900 hover:bg-navy-800 text-white rounded-lg">Restore Demo Data</button>
+          </div>
+        </div>
+      `);
+    }
+
+    function executeResetDemoData() {
+      appState.students = createSeedData();
+      saveData();
+      closeModal();
+      navigateToDashboard();
+      showToast('Sample ESL student records restored.');
+    }
+
+    // ============================================================================
+    // 8. MAIN RENDER LOOP
+    // ============================================================================
+    function render() {
+      const container = document.getElementById('appContainer');
+      if (!container) return;
+
+      if (appState.view === 'profile' && appState.activeStudentId) {
+        container.innerHTML = renderStudentProfile();
+      } else {
+        container.innerHTML = renderDashboard();
+      }
+    }
+
+    // Boot Application on Window Load
+    window.onload = function () {
+      loadData();
+      render();
+    };
+  </script>
+</body>
+</html>
